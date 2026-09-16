@@ -71,6 +71,18 @@ export function FindingsTab({
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
 
+  // Run → its review, for the Agent-runs timeline's findings popover. `runs`
+  // already carries every finding (persisted reviews are only ever created
+  // for a completed run, so this needs no separate status filter — see
+  // server/specs/findings-counter.md).
+  const reviewsByRunId = React.useMemo(() => {
+    const map = new Map<string, ReviewRecord>();
+    for (const review of runs) {
+      if (review.run_id) map.set(review.run_id, review);
+    }
+    return map;
+  }, [runs]);
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -131,6 +143,9 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            reviewsByRunId={reviewsByRunId}
+            repoFullName={repoFullName}
+            headSha={headSha}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

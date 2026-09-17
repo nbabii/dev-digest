@@ -29,6 +29,7 @@ module — don't duplicate module detail here.
 ## Do not touch
 
 - DB migrations (`server/src/db/migrations/`) — never edit existing migrations, always add a new one instead
+- Lock files (`pnpm-lock.yaml` in `client/`/`server/`, `package-lock.json` in `reviewer-core/`/`e2e/`) — never hand-edit; regenerate via the package manager (`pnpm install` / `npm install`) after changing a `package.json`
 
 ## Repo-wide gotchas
 

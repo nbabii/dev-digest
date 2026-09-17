@@ -6,18 +6,33 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/run-cost-badge";
+import { FindingsPopover, zeroCounts } from "@/components/findings-popover";
+import { usePrReviews } from "@/lib/hooks/reviews";
 import type { PrMeta } from "@/lib/types";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
 
-export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
+export function PRRow({
+  pr,
+  repoId,
+  repoFullName,
+}: {
+  pr: PrMeta;
+  repoId: string;
+  repoFullName?: string | null;
+}) {
   const t = useTranslations("prReview");
   const router = useRouter();
   const [h, setH] = React.useState(false);
+  const [findingsHover, setFindingsHover] = React.useState(false);
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
   const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+  // Full finding detail is only worth fetching once the popover is opened —
+  // the counts badge itself renders from the already-loaded pr.findings.
+  const reviewsQuery = usePrReviews(findingsHover ? pr.id : null);
+  const allFindings = reviewsQuery.data?.flatMap((r) => r.findings);
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -53,6 +68,17 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
         ) : (
           <span style={s.muted}>—</span>
         )}
+      </div>
+      <div style={s.findingsCell} onClick={(e) => e.stopPropagation()}>
+        <FindingsPopover
+          counts={pr.findings ?? zeroCounts()}
+          findings={allFindings}
+          loadingFindings={findingsHover && reviewsQuery.isLoading}
+          scope="pr"
+          repoFullName={repoFullName}
+          headSha={pr.head_sha}
+          onOpenChange={setFindingsHover}
+        />
       </div>
       <div>
         <Badge dot color={st.c} bg="transparent">

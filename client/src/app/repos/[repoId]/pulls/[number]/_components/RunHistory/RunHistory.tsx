@@ -4,7 +4,8 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/run-cost-badge";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import { FindingsPopover, countBySeverity, openFindings, zeroCounts } from "@/components/findings-popover";
+import type { RunSummary, PrCommit, ReviewRecord } from "@devdigest/shared";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -88,12 +89,19 @@ function tsOf(s: string | null | undefined): number {
 export function RunHistory({
   runs,
   commits = [],
+  reviewsByRunId,
+  repoFullName,
+  headSha,
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
+  /** This run's persisted review (findings) — see FindingsTab's run_id join. */
+  reviewsByRunId?: Map<string, ReviewRecord>;
+  repoFullName?: string | null;
+  headSha?: string | null;
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -150,6 +158,9 @@ export function RunHistory({
         const r = item.run;
         const o = outcomeOf(r);
         const settled = r.status === "done";
+        const review = reviewsByRunId?.get(r.run_id);
+        const findings = review?.findings;
+        const counts = findings ? countBySeverity(openFindings(findings)) : zeroCounts();
         return (
           <div key={`run:${r.run_id}`} style={rowStyle}>
             <Badge color={o.color} bg={o.bg} icon={o.icon}>
@@ -190,8 +201,14 @@ export function RunHistory({
                 </div>
               )}
               {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}>
+                  <FindingsPopover
+                    counts={counts}
+                    findings={findings}
+                    scope="run"
+                    repoFullName={repoFullName}
+                    headSha={headSha}
+                  />
                   {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
                 </div>
               )}

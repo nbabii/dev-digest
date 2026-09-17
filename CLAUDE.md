@@ -26,6 +26,11 @@ module — don't duplicate module detail here.
 - `./scripts/e2e.sh` — isolated hermetic stack for the e2e suite (alternate ports)
 - `docker compose up -d` — Postgres only
 
+## Do not touch
+
+- DB migrations (`server/src/db/migrations/`) — never edit existing migrations, always add a new one instead
+- Lock files (`pnpm-lock.yaml` in `client/`/`server/`, `package-lock.json` in `reviewer-core/`/`e2e/`) — never hand-edit; regenerate via the package manager (`pnpm install` / `npm install`) after changing a `package.json`
+
 ## Repo-wide gotchas
 
 - Non-obvious discoveries (gotchas, decisions, recurring fixes) get appended to the touched module's `insights.md` by the `engineering-insights` skill — read that file before deep-diving in a module. Repo-wide findings that don't belong to one module have no dedicated file; propose a `CLAUDE.md` edit instead.

@@ -3,10 +3,12 @@
     "crumbLab": "Skills Lab",
     "crumbSkills": "Skills",
     "heading": "Skills",
+    "subtitle": "Rules and conventions agents can link into their prompt.",
     "addSkill": "Add Skill",
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
+      "create": "Create from scratch",
       "fromFile": "Import from file",
       "fromUrl": "Import from URL",
       "community": "Search community skills…"
@@ -30,13 +32,74 @@
       "body": "It may have been deleted."
     }
   },
+  "create": {
+    "title": "Create skill",
+    "subtitle": "A skill is a rule or convention appended to an agent's prompt once linked and enabled.",
+    "cancel": "Cancel",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "defaultName": "New Skill",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "pr-quality-rubric",
+      "description": "Description",
+      "descriptionPlaceholder": "What this skill checks for",
+      "type": "Type",
+      "body": "Body (Markdown)",
+      "bodyPlaceholder": "# Rule\nDescribe the rule…"
+    }
+  },
+  "editor": {
+    "loadErrorTitle": "Couldn’t load this skill",
+    "loadErrorBody": "The skill could not be loaded.",
+    "skillFallback": "Skill",
+    "listTitle": "Skills",
+    "add": "Add",
+    "createFromScratch": "Create from scratch",
+    "disabled": "disabled",
+    "tabs": {
+      "config": "Config",
+      "preview": "Preview",
+      "versions": "Versions"
+    }
+  },
+  "config": {
+    "title": "Configuration",
+    "enabled": "Enabled",
+    "name": "Name",
+    "description": "Description",
+    "descriptionHint": "This is the skill's interface — write it directively, as an instruction the reviewing agent will follow.",
+    "type": "Type",
+    "save": "Save skill",
+    "saving": "Saving…",
+    "saved": "Saved (v{version})",
+    "savedToast": "Skill saved (v{version})"
+  },
+  "versions": {
+    "title": "Versions",
+    "empty": "No previous versions yet.",
+    "current": "current",
+    "diff": "Diff",
+    "restore": "Restore",
+    "restoring": "Restoring…",
+    "restoreConfirm": "Restore v{version}? This creates a new version with that body.",
+    "loadError": "Could not load version history.",
+    "diffTitle": "v{version} → current",
+    "noDiff": "No differences.",
+    "closeDiff": "Close diff"
+  },
   "drawer": {
-    "title": "Add a skill",
+    "title": "Add skill",
     "subtitle": "Import from a file, a URL, or search vetted community skills",
     "tabs": {
+      "create": "Create",
       "file": "From file",
-      "url": "From URL",
+      "url": "Import from URL",
       "community": "Community"
+    },
+    "comingSoon": {
+      "title": "Not available yet",
+      "body": "Importing a skill from a URL isn't supported yet. Use \"From file\" to upload a markdown file or a .zip archive instead."
     },
     "importFailed": "Import failed"
   },
@@ -49,7 +112,26 @@
     "bodyPlaceholder": "# Rule\nDescribe the rule…",
     "importing": "Importing…",
     "import": "Import skill",
-    "success": "Imported \"{name}\" (stored as untrusted data)."
+    "success": "Imported \"{name}\" (stored as untrusted data).",
+    "steps": {
+      "upload": "Upload",
+      "preview": "Preview",
+      "confirm": "Confirm"
+    },
+    "chooseFile": "Choose a file…",
+    "chooseFileHint": "Accepts .md, .txt, or .zip.",
+    "selectedFile": "Selected: {name}",
+    "previewing": "Reading file…",
+    "previewError": "Could not read this file.",
+    "previewTitle": "Suggested skill",
+    "ignoredEntries": "Ignored entries — not read, not executed:",
+    "noIgnoredEntries": "No entries were ignored.",
+    "confirmTitle": "Review before import",
+    "descriptionLabel": "Description",
+    "typeLabel": "Type",
+    "back": "Back",
+    "continue": "Continue",
+    "viewSkill": "View skill"
   },
   "url": {
     "label": "Skill URL",
@@ -72,6 +154,9 @@
     "import": "Import"
   },
   "listItem": {
+    "noDescription": "No description",
+    "version": "v{version}",
+    "agentCount": "{count, plural, one {# agent} other {# agents}}",
     "needsVetting": "needs vetting",
     "vettingTitle": "Untrusted source — vet before enabling",
     "type": {

@@ -128,6 +128,8 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  /** How many agents currently link this skill (agent_skills row count). */
+  agent_count: z.number().int().nonnegative(),
 });
 export type Skill = z.infer<typeof Skill>;
 

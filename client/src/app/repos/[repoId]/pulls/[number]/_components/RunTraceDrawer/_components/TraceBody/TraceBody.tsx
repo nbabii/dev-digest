@@ -74,7 +74,20 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
       <TraceSection icon="FileText" title={t("trace.promptAssembly")} defaultOpen={false}>
         <PromptBlock label={t("trace.prompt.system")} text={trace.prompt_assembly.system} color={PROMPT_COLORS.system} />
         {trace.prompt_assembly.skills != null && (
-          <PromptBlock label={t("trace.prompt.skills")} text={trace.prompt_assembly.skills} color={PROMPT_COLORS.skills} />
+          <PromptBlock
+            label={
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                {t("trace.prompt.skills")}
+                {trace.prompt_assembly.token_counts?.skills != null && (
+                  <Badge color="var(--text-muted)">
+                    {t("trace.prompt.skillsTokens", { count: trace.prompt_assembly.token_counts.skills })}
+                  </Badge>
+                )}
+              </span>
+            }
+            text={trace.prompt_assembly.skills}
+            color={PROMPT_COLORS.skills}
+          />
         )}
         {trace.prompt_assembly.memory != null && (
           <PromptBlock label={t("trace.prompt.memory")} text={trace.prompt_assembly.memory} color={PROMPT_COLORS.memory} />

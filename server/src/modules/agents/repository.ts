@@ -225,12 +225,20 @@ export class AgentsRepository {
    * Replace the full set of linked skills for an agent with `skillIds`, assigning
    * order = index. Used by the "Skills" editor tab (attach/reorder). Skills not in
    * the list are unlinked.
+   *
+   * Wrapped in a transaction: the agent-editor drag-to-reorder UI calls this once
+   * per drop, far more frequently and with tighter timing than any prior caller —
+   * an untransacted delete-then-reinsert is exposed to an interleaved race if two
+   * reorders land concurrently (one delete could remove rows a concurrent insert
+   * just wrote). The transaction makes the replace atomic.
    */
   async setSkills(agentId: string, skillIds: string[]): Promise<void> {
-    await this.db.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
-    if (skillIds.length === 0) return;
-    await this.db
-      .insert(t.agentSkills)
-      .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
+      if (skillIds.length === 0) return;
+      await tx
+        .insert(t.agentSkills)
+        .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    });
   }
 }

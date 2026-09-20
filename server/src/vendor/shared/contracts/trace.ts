@@ -49,6 +49,19 @@ export const PromptAssembly = z.object({
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
   user: z.string(),
+  /**
+   * Per-slot token attribution for prompt sections that can vary widely in
+   * size. Currently only `skills` (the joined, formatted linked-skill bodies
+   * — see ReviewRunExecutor.runOneAgent, which computes this with the
+   * TiktokenTokenizer port). Optional/backward-compatible: absent on any
+   * trace persisted before this field existed, and omitted when there are no
+   * skills attached to the run.
+   */
+  token_counts: z
+    .object({
+      skills: z.number().int().nonnegative().nullish(),
+    })
+    .nullish(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;
 

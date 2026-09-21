@@ -8,6 +8,7 @@ import { IdParams, VersionParams } from '../_shared/schemas.js';
 import { NotFoundError, ValidationError } from '../../platform/errors.js';
 import { SkillsService } from './service.js';
 import { buildImportPreview, IMPORT_LIMITS } from './import-parser.js';
+import { buildUrlImportPreview } from './url-import.js';
 
 /**
  * Skills module — entity CRUD + import. Mirrors `modules/agents/routes.ts`.
@@ -20,6 +21,7 @@ import { buildImportPreview, IMPORT_LIMITS } from './import-parser.js';
  *   GET    /skills/:id/versions          history, newest first
  *   GET    /skills/:id/versions/:version one snapshot
  *   POST   /skills/import/preview        parse an uploaded file/archive -> suggested fields, NOT persisted
+ *   POST   /skills/import/url-preview    fetch a https:// URL -> suggested fields, NOT persisted (see skill-url-import.md)
  *   POST   /skills/import                confirm-create from a previewed payload (source+enabled server-forced)
  */
 
@@ -52,6 +54,10 @@ const UpdateSkillBody = z.object({
  * through POST /skills/import" rule.
  */
 const ImportSource = z.enum(['imported_url', 'extracted']);
+
+const UrlPreviewBody = z.object({
+  url: z.string().url(),
+});
 
 const ConfirmImportBody = z.object({
   name: z.string().min(1),
@@ -150,6 +156,15 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
         );
       }
       return buildImportPreview(file.filename, buffer);
+    },
+  );
+
+  app.post(
+    '/skills/import/url-preview',
+    { schema: { body: UrlPreviewBody } },
+    async (req) => {
+      await getContext(app.container, req); // tenancy check, same as the file-preview route above
+      return buildUrlImportPreview(req.body.url);
     },
   );
 

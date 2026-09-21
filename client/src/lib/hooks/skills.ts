@@ -126,6 +126,14 @@ export function useImportSkillPreview() {
   });
 }
 
+/** Fetch a `https://` URL for a preview — nothing is persisted yet. See
+    server/specs/skill-url-import.md for the fetch/SSRF-safety design. */
+export function useImportUrlPreview() {
+  return useMutation({
+    mutationFn: (url: string) => api.post<SkillImportPreview>("/skills/import/url-preview", { url }),
+  });
+}
+
 export interface ConfirmSkillImportInput {
   name: string;
   description?: string;

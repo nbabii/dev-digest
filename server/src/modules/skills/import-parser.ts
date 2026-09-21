@@ -56,7 +56,8 @@ function extOf(name: string): string {
   return i === -1 ? '' : name.slice(i).toLowerCase();
 }
 
-function baseName(name: string): string {
+/** Exported for reuse by url-import.ts (URL-path-derived fallback name). */
+export function baseName(name: string): string {
   const withoutDir = name.slice(name.lastIndexOf('/') + 1);
   const ext = extOf(withoutDir);
   return ext ? withoutDir.slice(0, -ext.length) : withoutDir;

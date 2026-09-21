@@ -34,7 +34,7 @@ export function AddSkillModal({ onClose }: { onClose: () => void }) {
       </div>
       {tab === "create" && <CreatePanel onClose={onClose} />}
       {tab === "file" && <FilePanel onClose={onClose} />}
-      {tab === "url" && <UrlPanel />}
+      {tab === "url" && <UrlPanel onClose={onClose} />}
     </Modal>
   );
 }

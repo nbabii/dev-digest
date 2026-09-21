@@ -35,9 +35,10 @@ describe("AddSkillModal (smoke)", () => {
     expect(screen.getByText("Choose a file…")).toBeInTheDocument();
   });
 
-  it("switches to the Import from URL tab and shows a not-available message", () => {
+  it("switches to the Import from URL tab and shows the URL entry step", () => {
     renderWithProviders(<AddSkillModal onClose={vi.fn()} />);
     fireEvent.click(screen.getByText("Import from URL"));
-    expect(screen.getByText("Not available yet")).toBeInTheDocument();
+    expect(screen.getByText("Skill URL")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("https://example.com/skills/security.md")).toBeInTheDocument();
   });
 });

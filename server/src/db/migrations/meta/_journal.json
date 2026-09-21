@@ -78,6 +78,13 @@
       "when": 1789514766121,
       "tag": "0010_superb_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789952666134,
+      "tag": "0011_wakeful_psynapse",
+      "breakpoints": true
     }
   ]
 }

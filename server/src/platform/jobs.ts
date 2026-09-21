@@ -97,6 +97,17 @@ export class JobRunner {
       }
     }) as Promise<void>;
 
+    // Every job-kind's caller today (repos/service.ts, repo-intel/routes.ts,
+    // conventions/routes.ts) fires-and-forgets `done` — the outcome is read
+    // back from `jobs.status`/`error`, not by awaiting this promise. Without
+    // a handler attached here, a failing job (e.g. the LLM timeout above)
+    // becomes an unhandled promise rejection, which Node terminates the
+    // whole process on by default. This `.catch()` marks `done` itself as
+    // handled; a caller that DOES want to await/inspect the failure can
+    // still attach its own `.catch()`/`.then()` to the same `done` — this
+    // no-op doesn't consume or suppress that.
+    done.catch(() => {});
+
     return { id: jobId, done };
   }
 

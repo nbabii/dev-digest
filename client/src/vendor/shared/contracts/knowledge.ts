@@ -142,16 +142,51 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
-// ---- Conventions ----
+// ---- Conventions (see server/specs/conventions-extractor.md) ----
+export const ConventionCategory = z.enum([
+  'naming',
+  'structure',
+  'error-handling',
+  'data-access',
+  'testing',
+  'security',
+  'style',
+  'other',
+]);
+export type ConventionCategory = z.infer<typeof ConventionCategory>;
+
+export const ConventionStatus = z.enum(['pending', 'accepted', 'rejected']);
+export type ConventionStatus = z.infer<typeof ConventionStatus>;
+
+/** Persisted/API row shape — `accepted: boolean` (old, dead shape) replaced by `status`. */
 export const ConventionCandidate = z.object({
   id: z.string(),
+  scan_id: z.string(),
+  repo_id: z.string(),
+  category: ConventionCategory,
   rule: z.string(),
   evidence_path: z.string(),
+  evidence_line_start: z.number().int(),
+  evidence_line_end: z.number().int(),
   evidence_snippet: z.string(),
   confidence: z.number().min(0).max(1),
-  accepted: z.boolean(),
+  status: ConventionStatus,
+  created_at: z.string(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
+
+export const ConventionScan = z.object({
+  id: z.string(),
+  repo_id: z.string(),
+  status: z.enum(['running', 'completed', 'failed']),
+  sample_file_count: z.number().int(),
+  candidates_found: z.number().int(),
+  candidates_discarded: z.number().int(),
+  error: z.string().nullish(),
+  started_at: z.string(),
+  finished_at: z.string().nullish(),
+});
+export type ConventionScan = z.infer<typeof ConventionScan>;
 
 // ---- Agents ----
 export const Provider = z.enum(['openai', 'anthropic', 'openrouter']);

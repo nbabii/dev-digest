@@ -6,13 +6,22 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, EmptyState, ErrorState, Skeleton, Icon } from "@devdigest/ui";
+import type { Agent } from "@devdigest/shared";
 import { AppShell } from "../../../../components/app-shell";
-import { useAgents, useUpdateAgent } from "../../../../lib/hooks/agents";
+import { useAgents, useAgentSkillLinks, useUpdateAgent } from "../../../../lib/hooks/agents";
 import { AgentCard } from "../AgentCard";
 import { CreateAgentModal } from "./_components/CreateAgentModal";
 import { TEMPLATES } from "./constants";
 import { filterAgents } from "./helpers";
 import { s } from "./styles";
+
+/** Wraps AgentCard with its linked-skill count (GET /agents/:id/skills) — a
+    tiny component so the per-agent query obeys the rules of hooks (a plain
+    .map() callback can't call hooks directly). */
+function AgentCardRow({ a, onClick, onToggle }: { a: Agent; onClick?: () => void; onToggle?: (enabled: boolean) => void }) {
+  const { data: links } = useAgentSkillLinks(a.id);
+  return <AgentCard ag={a} skillCount={links?.length} onClick={onClick} onToggle={onToggle} />;
+}
 
 export function AgentsListView() {
   const t = useTranslations("agents");
@@ -83,9 +92,9 @@ export function AgentsListView() {
         {list.length > 0 && (
           <div style={s.grid}>
             {list.map((a) => (
-              <AgentCard
+              <AgentCardRow
                 key={a.id}
-                ag={a}
+                a={a}
                 onClick={() => router.push(`/agents/${a.id}?tab=config`)}
                 onToggle={(enabled) => update.mutate({ id: a.id, patch: { enabled } })}
               />

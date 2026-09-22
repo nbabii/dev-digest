@@ -3,18 +3,12 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
-import { IdParams } from '../_shared/schemas.js';
+import { IdParams, VersionParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { AgentsService } from './service.js';
 
 /** `/providers/:id` addresses a provider by name, not a uuid. */
 const ProviderParams = z.object({ id: Provider });
-
-/** `/agents/:id/versions/:version` — id is a uuid, version a positive integer. */
-const VersionParams = z.object({
-  id: z.string().uuid(),
-  version: z.coerce.number().int().positive(),
-});
 
 /**
  * A2 — agents module (owner A2).

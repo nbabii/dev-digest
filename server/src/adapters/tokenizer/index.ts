@@ -8,8 +8,12 @@
  * lazy-initialised (loading the BPE ranks is the heavy part) and any failure
  * falls back to the `ceil(chars / 4)` heuristic — the renderer must never throw.
  *
- * Scope: in-process, ONLY under modules/repo-intel. Swappable in tests via a
- * mock counter (ContainerOverrides.tokenizer).
+ * Scope: in-process. Originally only under modules/repo-intel (repo-map budget
+ * search); also used by modules/reviews/run-executor.ts to compute
+ * `RunTrace.prompt_assembly.token_counts.skills` (a one-shot count over the
+ * joined, formatted linked-skill bodies — no budget search there, just a
+ * single `count()` call per run). Swappable in tests via a mock counter
+ * (ContainerOverrides.tokenizer).
  */
 import { getEncoding, type Tiktoken } from 'js-tiktoken';
 

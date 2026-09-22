@@ -73,8 +73,12 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: 'conventions',
     label: 'Conventions',
     description: 'Extracts coding conventions from the repo.',
-    defaultProvider: 'openai',
-    defaultModel: 'gpt-5.4',
+    // Kept in sync with server/src/vendor/shared/contracts/platform.ts and
+    // client/src/lib/feature-models.ts (the UI-consumed mirror) — see that
+    // file's comment for why this differs from resolveFeatureModel's usual
+    // registry-default pattern.
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
   },
 ];
 

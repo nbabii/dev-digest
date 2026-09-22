@@ -1,6 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import { reviewPullRequest, countBlockers, wrapUntrusted } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -183,6 +183,26 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // Skills — resolve this agent's linked, enabled skills (ordered), format
+      // each as a distinguishable "### <name>" heading, and wrap anything not
+      // workspace-authored as untrusted. See server/specs/skills.md's Trust
+      // model: 'manual' skills are trusted like the system prompt; imported /
+      // extracted / community skills are someone else's instructions living in
+      // this agent's prompt, so they get the same wrapUntrusted treatment as
+      // the diff/PR-description/repo-map sections. `linkedSkills` returns
+      // `{ skill: SkillRow; order: number }[]` already ordered ascending —
+      // fields live on `.skill`, not on the row itself.
+      const linkedSkills = await this.agents.linkedSkills(agent.id);
+      const skillBodies = linkedSkills
+        .filter((l) => l.skill.enabled)
+        .map((l) => {
+          const block = `### ${l.skill.name}\n${l.skill.body}`;
+          return l.skill.source === 'manual' ? block : wrapUntrusted(l.skill.name, block);
+        });
+      if (skillBodies.length > 0) {
+        runLog.info(`skills: ${skillBodies.length} linked skill(s) attached`);
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -195,6 +215,9 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // Resolved skill bodies (NOT slugs) — formatting/trust-wrapping is the
+        // caller's job per reviewer-core's own documented PromptParts contract.
+        skills: skillBodies,
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -211,6 +234,15 @@ export class ReviewRunExecutor {
         },
       });
       const { tokensIn, tokensOut, costUsd, grounding } = outcome;
+
+      // Trace token attribution for the skills block (see server/specs/skills.md
+      // "Trace: skills block + token count"). Computed here (this run does NOT
+      // go through platform/trace-builder.ts's buildRunTrace — that's a
+      // separate helper for the A5 multi-agent/built-in-detector path) rather
+      // than in reviewer-core, over the same joined string assemblePrompt used
+      // to render the `## Skills / rules` section.
+      const skillsTokenCount =
+        skillBodies.length > 0 ? this.container.tokenizer.count(skillBodies.join('\n\n')) : undefined;
 
       const keptFindings = outcome.review.findings;
 
@@ -270,7 +302,10 @@ export class ReviewRunExecutor {
           findings: findingRows.length,
           grounding,
         },
-        prompt_assembly: outcome.assembly,
+        prompt_assembly: {
+          ...outcome.assembly,
+          ...(skillsTokenCount !== undefined ? { token_counts: { skills: skillsTokenCount } } : {}),
+        },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
           args: c.label,

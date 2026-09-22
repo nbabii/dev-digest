@@ -10,3 +10,13 @@ import { z } from 'zod';
  */
 export const IdParams = z.object({ id: z.string().uuid() });
 export type IdParams = z.infer<typeof IdParams>;
+
+/**
+ * `/:id/versions/:version` — id is a uuid, version a positive integer. Shared
+ * by any module with an append-only version-snapshot table (agents, skills).
+ */
+export const VersionParams = z.object({
+  id: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
+});
+export type VersionParams = z.infer<typeof VersionParams>;

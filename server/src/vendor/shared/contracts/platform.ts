@@ -73,8 +73,14 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: 'conventions',
     label: 'Conventions',
     description: 'Extracts coding conventions from the repo.',
-    defaultProvider: 'openai',
-    defaultModel: 'gpt-5.4',
+    // Matches CONVENTIONS_DEFAULT_MODEL (server/src/modules/conventions/constants.ts)
+    // — that module deliberately does NOT call resolveFeatureModel (which would
+    // read this registry default), per getFeatureModelOverride's own doc comment
+    // naming 'conventions' as a caller that keeps its own dynamic default. Kept
+    // in sync here anyway so Settings → Feature Models displays the model that
+    // actually runs, instead of a stale, unrelated default.
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
   },
 ];
 

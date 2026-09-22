@@ -1,0 +1,71 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  card: (status: "pending" | "accepted" | "rejected"): CSSProperties => ({
+    borderRadius: 12,
+    border: "1px solid var(--border)",
+    borderLeft: `3px solid ${status === "accepted" ? "var(--success)" : status === "rejected" ? "var(--danger)" : "var(--border-strong)"}`,
+    background: "var(--bg-elevated)",
+    padding: 18,
+  }),
+  headerRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
+  } satisfies CSSProperties,
+  rule: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: 600,
+    fontStyle: "italic",
+    cursor: "text",
+  } satisfies CSSProperties,
+  ruleInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: 600,
+    fontStyle: "italic",
+    background: "transparent",
+    border: "1px solid var(--border-strong)",
+    borderRadius: 6,
+    padding: "2px 6px",
+    color: "inherit",
+    font: "inherit",
+  } satisfies CSSProperties,
+  actions: {
+    display: "flex",
+    gap: 8,
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  evidenceBox: {
+    marginTop: 12,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    overflow: "hidden",
+  } satisfies CSSProperties,
+  evidenceHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 10px",
+    fontSize: 12,
+    fontFamily: "var(--font-mono)",
+    color: "var(--text-secondary)",
+    background: "var(--bg-surface)",
+    borderBottom: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  evidenceSnippet: {
+    margin: 0,
+    padding: "10px 14px",
+    fontSize: 12.5,
+    fontFamily: "var(--font-mono)",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    color: "var(--text-primary)",
+    background: "var(--bg-surface)",
+  } satisfies CSSProperties,
+  confidenceRow: {
+    marginTop: 14,
+    maxWidth: 260,
+  } satisfies CSSProperties,
+};

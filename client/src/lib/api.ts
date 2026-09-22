@@ -20,6 +20,10 @@ export class ApiError extends Error {
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  // A FormData body (multipart upload) must NOT get an explicit content-type —
+  // the browser sets `multipart/form-data; boundary=...` itself, and
+  // overriding it here would drop the boundary and break parsing server-side.
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
@@ -27,7 +31,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         // Only declare a JSON body when one is actually sent — otherwise a
         // body-less POST/PUT (e.g. tour generate, refresh, reindex) trips
         // Fastify's "Body cannot be empty when content-type is application/json".
-        ...(init?.body != null ? { "content-type": "application/json" } : {}),
+        ...(init?.body != null && !isFormData ? { "content-type": "application/json" } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -66,6 +70,8 @@ export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
   post: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  /** POST with a `FormData` body (multipart upload) — content-type is left to the browser. */
+  postForm: <T>(path: string, form: FormData) => apiFetch<T>(path, { method: "POST", body: form }),
   put: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>

@@ -1,0 +1,55 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for SkillsTab. */
+export const s = {
+  wrap: { maxWidth: 760 } satisfies CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: 12, marginBottom: 6 } satisfies CSSProperties,
+  h2: { fontSize: 18, fontWeight: 700 } satisfies CSSProperties,
+  count: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
+  hint: { fontSize: 12, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.5 } satisfies CSSProperties,
+  search: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "7px 10px",
+    borderRadius: 7,
+    border: "1px solid var(--border)",
+    background: "var(--bg-surface)",
+    marginBottom: 14,
+    maxWidth: 260,
+  } satisfies CSSProperties,
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    background: "transparent",
+    border: "none",
+    outline: "none",
+    color: "var(--text-primary)",
+  } satisfies CSSProperties,
+  empty: { fontSize: 13, color: "var(--text-muted)", padding: "20px 0" } satisfies CSSProperties,
+  row: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 12px",
+    borderRadius: 7,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+    marginBottom: 6,
+  } satisfies CSSProperties,
+  dragHandle: (enabled: boolean): CSSProperties => ({
+    display: "inline-flex",
+    color: "var(--text-muted)",
+    cursor: enabled ? "grab" : "not-allowed",
+    touchAction: "none",
+    flexShrink: 0,
+  }),
+  name: {
+    fontSize: 13,
+    fontWeight: 500,
+    flex: 1,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  } satisfies CSSProperties,
+} as const;

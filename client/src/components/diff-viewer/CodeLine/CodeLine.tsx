@@ -5,21 +5,39 @@
 import React from "react";
 import { commentTargetFor, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { type Line } from "../helpers";
-import { s, lineRowFor, lineSignFor } from "../styles";
+import { useTranslations } from "next-intl";
+import type { FindingRecord } from "@devdigest/shared";
+import { s, fs, lineRowFor, lineSignFor, findingBar, severityChip } from "../styles";
+import { SEVERITY_COLOR, SEVERITY_COLOR_FALLBACK } from "../constants";
 import { CommentThreadView } from "../CommentThreadView";
 import { InlineComposer } from "../InlineComposer";
+
+const KNOWN_SEVERITIES = new Set(Object.keys(SEVERITY_COLOR));
+
+/** Translate known severities; fall back to the raw lowercase value for unknown ones. */
+function severityLabel(t: (key: string) => string, severity: string): string {
+  return KNOWN_SEVERITIES.has(severity)
+    ? t(`diffViewer.severity${severity}`)
+    : severity.toLowerCase();
+}
 
 export function CodeLine({
   ln,
   path,
   threads,
   commenting,
+  findings = [],
+  renderFinding,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
+  /** Findings anchored to this line (RIGHT side). */
+  findings?: FindingRecord[];
+  renderFinding?: (f: FindingRecord) => React.ReactNode;
 }) {
+  const t = useTranslations("shell");
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
 
@@ -34,6 +52,9 @@ export function CodeLine({
   const sign = ln.kind === "add" ? "+" : ln.kind === "del" ? "−" : "";
   const target = commenting?.canComment ? commentTargetFor(ln) : null;
   const showAdd = hover && !!target && !composing;
+  const shownFindings = renderFinding ? findings : [];
+  const top = shownFindings[0];
+  const topColor = top ? (SEVERITY_COLOR[top.severity] ?? SEVERITY_COLOR_FALLBACK) : undefined;
 
   return (
     <div
@@ -41,7 +62,7 @@ export function CodeLine({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind)}>
+      <div style={topColor ? { ...lineRowFor(ln.kind), ...findingBar(topColor) } : lineRowFor(ln.kind)}>
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button
@@ -62,7 +83,17 @@ export function CodeLine({
         <span className="mono" style={s.lineText}>
           {ln.text || " "}
         </span>
+        {top && topColor && (
+          <span style={severityChip(topColor)}>{severityLabel(t, top.severity)}</span>
+        )}
       </div>
+
+      {renderFinding &&
+        shownFindings.map((f) => (
+          <div key={f.id} style={fs.findingWrap}>
+            {renderFinding(f)}
+          </div>
+        ))}
 
       {commenting &&
         commenting.showComments &&

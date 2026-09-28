@@ -90,3 +90,73 @@ export function lineSignFor(kind: Line["kind"]): CSSProperties {
     flexShrink: 0,
   };
 }
+
+/** Smart Diff / inline-findings styles. */
+export const fs = {
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "var(--crit)",
+    display: "inline-block",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  findingWrap: { margin: "6px 14px 6px 58px" } satisfies CSSProperties,
+  unanchoredWrap: {
+    borderTop: "1px solid var(--border)",
+    margin: "4px 14px 4px 14px",
+    paddingTop: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  } satisfies CSSProperties,
+  unanchoredTitle: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  groups: { display: "flex", flexDirection: "column", gap: 18 } satisfies CSSProperties,
+  groupHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    padding: "4px 2px",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    textAlign: "left",
+    color: "var(--text-primary)",
+    font: "inherit",
+  } satisfies CSSProperties,
+  groupLabel: { fontSize: 13, fontWeight: 600 } satisfies CSSProperties,
+  groupDesc: { fontSize: 12, color: "var(--text-muted)", flex: 1 } satisfies CSSProperties,
+  groupMeta: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  groupFindings: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 12,
+    color: "var(--crit)",
+  } satisfies CSSProperties,
+  groupFiles: { display: "flex", flexDirection: "column", gap: 10, marginTop: 8 } satisfies CSSProperties,
+} as const;
+
+export function roleSquare(color: string): CSSProperties {
+  return { width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 };
+}
+
+/** Row style for a line with anchored findings: left severity bar. */
+export function findingBar(color: string): CSSProperties {
+  return { boxShadow: `inset 3px 0 0 ${color}` };
+}
+
+export function severityChip(color: string): CSSProperties {
+  return {
+    alignSelf: "center",
+    flexShrink: 0,
+    marginRight: 10,
+    padding: "0 6px",
+    borderRadius: 4,
+    fontSize: 11,
+    lineHeight: "16px",
+    color,
+    border: `1px solid ${color}`,
+  };
+}

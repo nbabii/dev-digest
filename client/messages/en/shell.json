@@ -40,6 +40,27 @@
     "reply": "Reply",
     "viewOnGitHub": "View on GitHub",
     "postedToGitHub": "Posts to GitHub immediately",
-    "outdatedTitle": "{count} comment(s) on older revisions"
+    "outdatedTitle": "{count} comment(s) on older revisions",
+    "orderSmart": "Smart order",
+    "orderOriginal": "Original order",
+    "orderLabel": "File order",
+    "filesCount": "{count, plural, one {# file} other {# files}}",
+    "groupCore": "Core",
+    "groupCoreDesc": "Application logic",
+    "groupTests": "Tests",
+    "groupTestsDesc": "Tests and fixtures",
+    "groupWiring": "Wiring",
+    "groupWiringDesc": "Config, exports and glue",
+    "groupDocs": "Docs",
+    "groupDocsDesc": "Documentation",
+    "groupBoilerplate": "Boilerplate",
+    "groupBoilerplateDesc": "Lock files, generated and build output",
+    "groupFindings": "{count, plural, one {# file with findings} other {# files with findings}}",
+    "fileFindings": "{count, plural, one {# finding} other {# findings}} in this file",
+    "unanchoredTitle": "{count, plural, one {# finding} other {# findings}} not on a changed line",
+    "severityCRITICAL": "Critical",
+    "severityWARNING": "Warning",
+    "severitySUGGESTION": "Suggestion",
+    "severityINFO": "Info"
   }
 }

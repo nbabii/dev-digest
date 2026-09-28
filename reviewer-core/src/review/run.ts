@@ -1,5 +1,6 @@
 import type {
   Finding,
+  Intent,
   LLMProvider,
   PromptAssembly,
   Review,
@@ -7,7 +8,7 @@ import type {
   UnifiedDiff,
 } from '@devdigest/shared';
 import { Review as ReviewSchema } from '@devdigest/shared';
-import { assemblePrompt } from '../prompt.js';
+import { assemblePrompt, type PromptSectionMeta } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
@@ -50,6 +51,12 @@ export interface ReviewInput {
   diff: UnifiedDiff;
   /** Injected LLM provider (OpenRouter in CI, OpenAI/Anthropic in the studio). */
   llm: LLMProvider;
+  /**
+   * Optional classified PR intent/scope (Intent Layer). Untrusted; rendered
+   * before `prDescription` in the prompt. Empty/undefined → section omitted
+   * (no behavior change for existing callers).
+   */
+  intent?: Intent;
   /** 'auto' (default) picks single-pass unless the diff is large + multi-file. */
   strategy?: ReviewStrategy;
   /** Resolved skill bodies (NOT slugs). */
@@ -103,6 +110,8 @@ export interface ReviewOutcome {
   mode: ReviewMode;
   /** Prompt assembly (for the run trace). Single-pass: the one call; map-reduce: the whole-diff assembly. */
   assembly: PromptAssembly;
+  /** Per-section size/provenance metadata for the same assembly (safe to log — no section text). */
+  sections: PromptSectionMeta[];
   /** Per-chunk labels (for the run trace's tool_calls). */
   chunks: { label: string }[];
   tokensIn: number;
@@ -129,6 +138,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
 
   const promptParts = {
     system: input.systemPrompt,
+    intent: input.intent,
     skills: input.skills,
     memory: input.memory,
     specs: input.specs,
@@ -139,7 +149,9 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   };
 
   // Whole-diff assembly is the trace default; overwritten below for single-pass.
-  let assembly: PromptAssembly = assemblePrompt({ ...promptParts, diff: input.diff.raw }).assembly;
+  const wholeDiffAssembled = assemblePrompt({ ...promptParts, diff: input.diff.raw });
+  let assembly: PromptAssembly = wholeDiffAssembled.assembly;
+  let sections: PromptSectionMeta[] = wholeDiffAssembled.sections;
 
   const chunks =
     mode === 'map-reduce'
@@ -170,7 +182,10 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       { file: chunk.label },
     );
     const a = assemblePrompt({ ...promptParts, diff: chunk.diffText });
-    if (mode === 'single-pass') assembly = a.assembly;
+    if (mode === 'single-pass') {
+      assembly = a.assembly;
+      sections = a.sections;
+    }
     const res = await input.llm.completeStructured<Review>({
       model: input.model,
       schema: ReviewSchema,
@@ -210,6 +225,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     dropped: ground.dropped,
     mode,
     assembly,
+    sections,
     chunks: chunks.map((c) => ({ label: c.label })),
     tokensIn,
     tokensOut,

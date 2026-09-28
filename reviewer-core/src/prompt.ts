@@ -1,4 +1,4 @@
-import type { ChatMessage, PromptAssembly } from '@devdigest/shared';
+import type { ChatMessage, Intent, PromptAssembly } from '@devdigest/shared';
 
 /**
  * Prompt assembly + prompt-injection hardening.
@@ -36,9 +36,45 @@ export function wrapUntrusted(label: string, content: string): string {
 /** Cap the PR description so a huge author body can't blow the token budget. */
 const MAX_PR_DESCRIPTION_CHARS = 4000;
 
+/**
+ * Render a classified `Intent` for the prompt. This is the "genuinely serious
+ * issue still surfaces" policy (docs/plans/intent-layer.md, Architecture
+ * decision 4) turned into an actionable instruction — a prompt-level signal,
+ * not a mechanical drop-gate like `grounding.ts`'s citation check, so an
+ * under/over-confident classification can never fully suppress a real defect.
+ */
+function formatIntent(intent: Intent): string {
+  const bulletsOrNone = (items: string[]) =>
+    items.length > 0 ? items.map((s) => `- ${s}`).join('\n') : '- (none stated)';
+  const lines = [
+    intent.summary,
+    `In scope:\n${bulletsOrNone(intent.in_scope)}`,
+    `Out of scope:\n${bulletsOrNone(intent.out_of_scope)}`,
+    `Confidence: ${Math.round(intent.confidence * 100)}%`,
+  ];
+  if (intent.insufficient_context) {
+    lines.push('Insufficient context to classify this PR confidently — treat this scope as a loose hint, not a firm boundary.');
+  }
+  lines.push(
+    'Findings clearly outside this declared scope should generally NOT be raised, UNLESS the ' +
+      'issue is a genuine CRITICAL-severity defect — in that case, raise it anyway and note in ' +
+      "the rationale that it's outside the PR's declared scope.",
+  );
+  return lines.join('\n\n');
+}
+
 export interface PromptParts {
   /** Agent's system prompt (trusted). */
   system: string;
+  /**
+   * Derived PR intent/scope (Intent Layer) — untrusted (it's model-derived
+   * from author-controlled text, per `INJECTION_GUARD`'s existing "derived
+   * intent/scope" entry). Rendered right after `task` and before
+   * `prDescription`: the distilled understanding comes first, then the raw
+   * description it was derived from. Empty/undefined → section omitted (no
+   * behavior change for existing callers).
+   */
+  intent?: Intent;
   /** Linked skill bodies (trusted-ish; community skills should be sanitized upstream). */
   skills?: string[];
   /** Relevant memory items (trusted, curated). */
@@ -72,9 +108,30 @@ export interface PromptParts {
   task?: string;
 }
 
+/** Provenance label for a prompt section — mirrors the trust classification
+ *  already documented per-field on {@link PromptParts} (untrusted/derived/
+ *  curated content is delimiter-wrapped by `assemblePrompt`; trusted content
+ *  is not). Used only for safe, content-free observability (see server's
+ *  `run-executor.ts` prompt-assembly log) — never persisted or shown raw. */
+export type PromptSectionSource = 'trusted' | 'untrusted' | 'derived' | 'curated';
+
+/**
+ * Non-content metadata about one rendered prompt section: enough to log
+ * safely (name, provenance, size) without ever exposing the section's actual
+ * text. Deliberately excludes the text itself — callers that need the text
+ * already have it via `AssembledPrompt.assembly`/`messages`.
+ */
+export interface PromptSectionMeta {
+  name: string;
+  source: PromptSectionSource;
+  chars: number;
+}
+
 export interface AssembledPrompt {
   messages: ChatMessage[];
   assembly: PromptAssembly;
+  /** Per-section size/provenance metadata, in render order — see {@link PromptSectionMeta}. */
+  sections: PromptSectionMeta[];
 }
 
 /**
@@ -101,23 +158,52 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
       ? parts.prDescription.slice(0, MAX_PR_DESCRIPTION_CHARS)
       : undefined;
 
+  const intentBlock = parts.intent ? formatIntent(parts.intent) : undefined;
+
   const userSections: string[] = [];
-  if (parts.task) userSections.push(parts.task);
+  // Mirrors userSections 1:1 — one entry per section actually rendered, same
+  // omit-when-empty rule, same order. Chars only, never the section text.
+  const sections: PromptSectionMeta[] = [{ name: 'system', source: 'trusted', chars: system.length }];
+  if (parts.task) {
+    userSections.push(parts.task);
+    sections.push({ name: 'task', source: 'trusted', chars: parts.task.length });
+  }
+  if (intentBlock) {
+    userSections.push(`## Derived PR intent\n${wrapUntrusted('intent', intentBlock)}`);
+    sections.push({ name: 'intent', source: 'derived', chars: intentBlock.length });
+  }
   if (prDescription) {
     userSections.push(`## PR description\n${wrapUntrusted('pr-description', prDescription)}`);
+    sections.push({ name: 'pr_description', source: 'untrusted', chars: prDescription.length });
   }
-  if (skillsBlock) userSections.push(`## Skills / rules\n${skillsBlock}`);
-  if (memoryBlock) userSections.push(`## Relevant memory\n${memoryBlock}`);
+  if (skillsBlock) {
+    userSections.push(`## Skills / rules\n${skillsBlock}`);
+    // Aggregate label only: manual skills are trusted, imported/community ones
+    // are individually wrapUntrusted-wrapped by the caller before joining here
+    // (see server's run-executor.ts) — this section is a mix, 'trusted' is the
+    // common/default case, not a claim every byte in it is.
+    sections.push({ name: 'skills', source: 'trusted', chars: skillsBlock.length });
+  }
+  if (memoryBlock) {
+    userSections.push(`## Relevant memory\n${memoryBlock}`);
+    sections.push({ name: 'memory', source: 'curated', chars: memoryBlock.length });
+  }
   if (parts.repoMap && parts.repoMap.trim().length > 0) {
     userSections.push(`## Repo skeleton\n${wrapUntrusted('repo-map', parts.repoMap)}`);
+    sections.push({ name: 'repo_map', source: 'derived', chars: parts.repoMap.length });
   }
-  if (specsBlock) userSections.push(`## Project context\n${specsBlock}`);
+  if (specsBlock) {
+    userSections.push(`## Project context\n${specsBlock}`);
+    sections.push({ name: 'specs', source: 'untrusted', chars: specsBlock.length });
+  }
   if (parts.callers && parts.callers.trim().length > 0) {
     userSections.push(
       `## Callers of changed symbols\n${wrapUntrusted('callers', parts.callers)}`,
     );
+    sections.push({ name: 'callers', source: 'derived', chars: parts.callers.length });
   }
   userSections.push(`## Diff to review\n${wrapUntrusted('diff', parts.diff)}`);
+  sections.push({ name: 'diff', source: 'untrusted', chars: parts.diff.length });
 
   const user = userSections.join('\n\n');
 
@@ -134,8 +220,9 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     callers: parts.callers ?? null,
     repo_map: parts.repoMap ?? null,
     pr_description: prDescription ?? null,
+    intent: intentBlock ?? null,
     user,
   };
 
-  return { messages, assembly };
+  return { messages, assembly, sections };
 }

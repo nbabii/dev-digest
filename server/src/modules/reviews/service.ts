@@ -1,10 +1,12 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, Intent, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
+import { IntentService } from './intent-service.js';
+import { loadDiff } from './diff-loader.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
 
@@ -29,11 +31,13 @@ export class ReviewService {
   private repo: ReviewRepository;
   private agents: Container['agentsRepo'];
   private executor: ReviewRunExecutor;
+  private intentService: IntentService;
 
   constructor(private container: Container) {
     this.repo = new ReviewRepository(container.db);
     this.agents = container.agentsRepo;
     this.executor = new ReviewRunExecutor(container, this.repo, this.agents);
+    this.intentService = new IntentService(container);
   }
 
   // ===========================================================================
@@ -175,5 +179,45 @@ export class ReviewService {
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {
     return this.repo.getRunTrace(runId);
+  }
+
+  // ===========================================================================
+  // Intent — see docs/plans/intent-layer.md.
+  // ===========================================================================
+
+  /** Resolve pull + repo + diff for the intent endpoints (shared by both routes). */
+  private async loadPullContext(workspaceId: string, prId: string) {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+    const diff = await loadDiff(this.container, this.repo, workspaceId, pull, repo);
+    return { pull, repo, diff };
+  }
+
+  /**
+   * `GET /pulls/:id/intent` — cached when the PR is unchanged since the last
+   * classification, else classifies synchronously. Unlike `run-executor.ts`'s
+   * best-effort treatment (an unclassifiable PR still gets reviewed), this
+   * endpoint's whole job IS the classification, so a failure here must be
+   * visible to the caller (502), not swallowed.
+   */
+  async getIntent(workspaceId: string, prId: string): Promise<Intent> {
+    const { pull, repo, diff } = await this.loadPullContext(workspaceId, prId);
+    try {
+      return await this.intentService.getOrClassify(workspaceId, pull, repo, diff);
+    } catch (err) {
+      throw new AppError('intent_classification_failed', (err as Error).message, 502);
+    }
+  }
+
+  /** `POST /pulls/:id/intent/reclassify` — force-runs the classifier, ignoring staleness. */
+  async reclassifyIntent(workspaceId: string, prId: string): Promise<Intent> {
+    const { pull, repo, diff } = await this.loadPullContext(workspaceId, prId);
+    try {
+      return await this.intentService.classify(workspaceId, pull, repo, diff);
+    } catch (err) {
+      throw new AppError('intent_classification_failed', (err as Error).message, 502);
+    }
   }
 }

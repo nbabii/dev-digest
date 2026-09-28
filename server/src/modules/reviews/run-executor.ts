@@ -1,6 +1,12 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers, wrapUntrusted } from '@devdigest/reviewer-core';
+import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { PromptAssembly } from '@devdigest/shared';
+import {
+  reviewPullRequest,
+  countBlockers,
+  wrapUntrusted,
+  type PromptSectionMeta,
+} from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -8,6 +14,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { IntentService } from './intent-service.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -25,6 +32,29 @@ export type Logger = {
   debug: (obj: unknown, msg?: string) => void;
 };
 
+/** Hard cap on any verbose prompt-log preview, regardless of the source section's real length. */
+const VERBOSE_PREVIEW_CHARS = 160;
+
+/**
+ * `PROMPT_LOG_VERBOSE`'s content-preview payload — local debugging only (see
+ * `logPromptAssembly`). Deliberately excludes `system` (agent-authored, low
+ * debugging value) and, per the two explicit bans this feature was built
+ * against, NEVER includes `diff` or `specs` — those two are represented only
+ * by their `chars` count in the base (non-verbose) log, always.
+ */
+function buildVerbosePreviews(assembly: PromptAssembly): Record<string, string> {
+  const preview = (s: string) =>
+    s.length > VERBOSE_PREVIEW_CHARS ? `${s.slice(0, VERBOSE_PREVIEW_CHARS)}…` : s;
+  const out: Record<string, string> = {};
+  if (assembly.intent) out.intent = preview(assembly.intent);
+  if (assembly.pr_description) out.pr_description = preview(assembly.pr_description);
+  if (assembly.skills) out.skills = preview(assembly.skills);
+  if (assembly.memory) out.memory = preview(assembly.memory);
+  if (assembly.repo_map) out.repo_map = preview(assembly.repo_map);
+  if (assembly.callers) out.callers = preview(assembly.callers);
+  return out;
+}
+
 // A reduced "Review per file" — same schema as Review (the model returns a small
 // Review per file; we merge findings + take the worst verdict / mean score).
 export type RunOutcome = {
@@ -41,11 +71,15 @@ export type RunOutcome = {
  * review. Per-agent failures are isolated.
  */
 export class ReviewRunExecutor {
+  private intentService: IntentService;
+
   constructor(
     private container: Container,
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
-  ) {}
+  ) {
+    this.intentService = new IntentService(container);
+  }
 
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
@@ -104,6 +138,22 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // Intent is ENRICHMENT, not a hard prerequisite (Architecture decision 3 /
+    // the "never let an enrichment break the run" pattern already used below
+    // for buildCallersDigest/buildRepoMapDigest) — unlike `GET /pulls/:id/intent`,
+    // where classification IS the endpoint's job, a classification failure here
+    // must not fail every queued run.
+    let intent: Intent | undefined;
+    try {
+      intent = await runLog.step(
+        'Determining PR intent',
+        () => this.intentService.getOrClassify(workspaceId, pull, repo, diff, logger),
+        { kind: 'tool' },
+      );
+    } catch (err) {
+      runLog.info(`intent: classification failed — continuing without intent (${(err as Error).message})`);
+    }
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -111,7 +161,7 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intent);
         logger?.info(
           {
             runId,
@@ -143,6 +193,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    intent?: Intent,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -218,6 +269,9 @@ export class ReviewRunExecutor {
         // Resolved skill bodies (NOT slugs) — formatting/trust-wrapping is the
         // caller's job per reviewer-core's own documented PromptParts contract.
         skills: skillBodies,
+        // Intent Layer pre-work (from executeRuns, best-effort — undefined on a
+        // classification failure). assemblePrompt omits the section when absent.
+        ...(intent ? { intent } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -243,6 +297,20 @@ export class ReviewRunExecutor {
       // to render the `## Skills / rules` section.
       const skillsTokenCount =
         skillBodies.length > 0 ? this.container.tokenizer.count(skillBodies.join('\n\n')) : undefined;
+
+      // Same idea for the Intent Layer's rendered block (`outcome.assembly.intent`
+      // — the same text `assemblePrompt` wrapped into the `## Derived PR intent`
+      // section, before wrapUntrusted's delimiters); undefined when no intent
+      // was attached to this run (classification failed / disabled upstream).
+      const intentTokenCount = outcome.assembly.intent
+        ? this.container.tokenizer.count(outcome.assembly.intent)
+        : undefined;
+
+      // Safe, structured observability for what actually went into the prompt —
+      // section name/provenance/size only, correlated to this run, never the
+      // section text itself. See `logPromptAssembly`'s doc comment for the
+      // verbose-local-only escape hatch and its hard limits.
+      this.logPromptAssembly(runId, agent, outcome.sections, outcome.assembly, runLog);
 
       const keptFindings = outcome.review.findings;
 
@@ -304,7 +372,14 @@ export class ReviewRunExecutor {
         },
         prompt_assembly: {
           ...outcome.assembly,
-          ...(skillsTokenCount !== undefined ? { token_counts: { skills: skillsTokenCount } } : {}),
+          ...(skillsTokenCount !== undefined || intentTokenCount !== undefined
+            ? {
+                token_counts: {
+                  ...(skillsTokenCount !== undefined ? { skills: skillsTokenCount } : {}),
+                  ...(intentTokenCount !== undefined ? { intent: intentTokenCount } : {}),
+                },
+              }
+            : {}),
         },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
@@ -362,6 +437,39 @@ export class ReviewRunExecutor {
    * rows per `getCallerSignatures` call) so the section stays under ~600
    * tokens even on heavy PRs.
    */
+  /**
+   * Safe, structured observability for prompt assembly: one log line per agent
+   * run, correlated by `runId`, naming every rendered section (name +
+   * trust/provenance + character count) — never the section's actual text.
+   * Secrets can't appear here structurally (they're resolved straight into
+   * provider auth by `SecretsProvider`/`container.llm`, never interpolated
+   * into prompt content), and the diff/specs sections are represented ONLY by
+   * their length, exactly like every other section, by default.
+   *
+   * `PROMPT_LOG_VERBOSE=true` (local dev only — `loadConfig` hard-forces this
+   * off whenever NODE_ENV=production, regardless of the env var) adds a small,
+   * length-capped content preview for local debugging. Even then, `diff` and
+   * `specs` are never previewed — only their counts — per the two explicit
+   * bans on logging full diff / private spec content; every other preview is
+   * hard-truncated so this can never become a de-facto full-content log.
+   */
+  private logPromptAssembly(
+    runId: string,
+    agent: AgentRow,
+    sections: PromptSectionMeta[],
+    assembly: PromptAssembly,
+    runLog: RunLogger,
+  ): void {
+    const verbose = this.container.config.promptLogVerbose;
+    runLog.info('Prompt assembled', {
+      correlationId: runId,
+      provider: agent.provider,
+      model: agent.model,
+      sections, // [{ name, source, chars }] — counts only, never section text
+      ...(verbose ? { verbose: true, previews: buildVerbosePreviews(assembly) } : {}),
+    });
+  }
+
   private async buildCallersDigest(
     repoId: string,
     diff: UnifiedDiff,

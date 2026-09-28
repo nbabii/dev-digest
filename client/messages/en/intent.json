@@ -1,0 +1,18 @@
+{
+  "card": {
+    "title": "Intent",
+    "confidence": "Confidence",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "insufficientContext": "Insufficient context",
+    "insufficientContextNote": "The PR description and linked sources didn't give the classifier enough to work with — treat this scope as a loose hint, not a firm boundary.",
+    "sourcesCaption": "Sources: {sources}",
+    "reclassify": "Re-classify",
+    "reclassifying": "Re-classifying…"
+  },
+  "error": {
+    "title": "Couldn't determine intent",
+    "body": "The intent classifier couldn't run — this is expected if no provider key is configured yet.",
+    "retry": "Retry"
+  }
+}

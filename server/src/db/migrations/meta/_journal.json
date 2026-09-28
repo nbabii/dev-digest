@@ -85,6 +85,13 @@
       "when": 1789952666134,
       "tag": "0011_wakeful_psynapse",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790621701189,
+      "tag": "0012_volatile_titanium_man",
+      "breakpoints": true
     }
   ]
 }

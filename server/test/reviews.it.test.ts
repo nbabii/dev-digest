@@ -119,6 +119,14 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
         git: new MockGitClient({ diff: DIFF }),
         llm: {
           [provider]: new MockLLMProvider(provider, { structured }),
+          // Intent Layer pre-work (run-executor.ts) always resolves
+          // container.llm('openrouter'), independent of the agent's own
+          // provider — mock it too so this stays hermetic (no real network
+          // call) regardless of a locally-configured OPENROUTER_API_KEY. No
+          // fixture → Intent.safeParse({}) fails → caught by run-executor's
+          // best-effort wrapper → intent stays undefined, same as before
+          // this feature existed.
+          openrouter: new MockLLMProvider('openai'),
         },
       },
     });

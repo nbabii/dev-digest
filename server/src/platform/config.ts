@@ -36,6 +36,11 @@ const EnvSchema = z.object({
     (v) => (v === '' ? undefined : v),
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   ),
+  // Opt-in, bounded content previews on the prompt-assembly log (see
+  // ReviewRunExecutor's `logPromptAssembly`) — for local debugging only. Forced
+  // off whenever NODE_ENV=production regardless of this var (see loadConfig
+  // below), so a stray true in a deployed .env can't turn it on there.
+  PROMPT_LOG_VERBOSE: z.string().optional(),
 });
 
 export type AppConfig = {
@@ -59,6 +64,14 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /**
+   * Whether the prompt-assembly log includes bounded content previews (still
+   * never `diff`/`specs`, always length-capped). Default false everywhere;
+   * true requires BOTH `PROMPT_LOG_VERBOSE=true` AND a non-production
+   * NODE_ENV — this is a hard AND, not just a default, so it cannot be
+   * switched on in a deployed instance by an env var alone.
+   */
+  promptLogVerbose: boolean;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -77,5 +90,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    promptLogVerbose: parsed.PROMPT_LOG_VERBOSE === 'true' && parsed.NODE_ENV !== 'production',
   };
 }

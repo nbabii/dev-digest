@@ -47,11 +47,14 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** Rendered intent/scope block injected into the prompt; null when absent. */
+  intent: z.string().nullish(),
   user: z.string(),
-  /** Token counts for select prompt-assembly blocks (currently: skills). */
+  /** Token counts for select prompt-assembly blocks (currently: skills, intent). */
   token_counts: z
     .object({
       skills: z.number().int().nullish(),
+      intent: z.number().int().nonnegative().nullish(),
     })
     .nullish(),
 });

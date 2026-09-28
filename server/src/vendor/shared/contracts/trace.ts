@@ -48,18 +48,22 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** Rendered intent/scope block injected into the prompt; null when absent (no classified intent for this run). */
+  intent: z.string().nullish(),
   user: z.string(),
   /**
    * Per-slot token attribution for prompt sections that can vary widely in
-   * size. Currently only `skills` (the joined, formatted linked-skill bodies
+   * size. Currently `skills` (the joined, formatted linked-skill bodies
    * — see ReviewRunExecutor.runOneAgent, which computes this with the
-   * TiktokenTokenizer port). Optional/backward-compatible: absent on any
-   * trace persisted before this field existed, and omitted when there are no
-   * skills attached to the run.
+   * TiktokenTokenizer port) and `intent` (the pre-call token estimate for
+   * the rendered intent block). Optional/backward-compatible: absent on any
+   * trace persisted before these fields existed, and omitted when the
+   * corresponding slot isn't attached to the run.
    */
   token_counts: z
     .object({
       skills: z.number().int().nonnegative().nullish(),
+      intent: z.number().int().nonnegative().nullish(),
     })
     .nullish(),
 });

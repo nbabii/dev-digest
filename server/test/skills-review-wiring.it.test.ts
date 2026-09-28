@@ -57,7 +57,21 @@ d('Skills wired into a real review run (Testcontainers pg)', () => {
       overrides: {
         embedder: new MockEmbedder(),
         git: new MockGitClient({ diff: DIFF }),
-        llm: { openai: new MockLLMProvider('openai', { structured: REVIEW_FIXTURE }) },
+        llm: {
+          openai: new MockLLMProvider('openai', { structured: REVIEW_FIXTURE }),
+          // The Intent Layer pre-work (run-executor.ts) always resolves
+          // `container.llm('openrouter')`, independent of the agent's own
+          // provider — without this override it would fall through to a REAL
+          // OpenRouter call (and a real network dependency) whenever a
+          // developer's local `~/.devdigest/secrets.json` happens to have an
+          // OPENROUTER_API_KEY configured, same class of hermeticity gap the
+          // `embedder`/`git` overrides above already guard against. No
+          // fixture is supplied, so `Intent.safeParse({})` fails and the
+          // classifier throws — caught by run-executor's best-effort
+          // wrapper, so `intent` stays undefined, matching this file's
+          // existing no-intent assertions unchanged.
+          openrouter: new MockLLMProvider('openai'),
+        },
       },
     });
   }

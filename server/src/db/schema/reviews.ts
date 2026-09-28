@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision, boolean } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
@@ -49,9 +49,20 @@ export const prIntent = pgTable('pr_intent', {
   prId: uuid('pr_id')
     .primaryKey()
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
-  intent: text('intent').notNull(),
+  summary: text('summary').notNull(),
   inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  confidence: doublePrecision('confidence').notNull(),
+  insufficientContext: boolean('insufficient_context').notNull().default(false),
+  sources: jsonb('sources').notNull().default(sql`'[]'::jsonb`),
+  provider: text('provider').notNull(),
+  model: text('model').notNull(),
+  tokensIn: integer('tokens_in').notNull(),
+  tokensOut: integer('tokens_out').notNull(),
+  costUsd: doublePrecision('cost_usd'),
+  classifiedHeadSha: text('classified_head_sha').notNull(),
+  classifiedBodyHash: text('classified_body_hash').notNull(),
+  classifiedAt: timestamp('classified_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const prBrief = pgTable('pr_brief', {

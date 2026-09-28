@@ -22,8 +22,11 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: "review_intent",
     label: "PR Review · Intent",
     description: "Derives a PR’s intent and scope before review.",
-    defaultProvider: "openai",
-    defaultModel: "gpt-4.1",
+    // Flash-tier, distinct from the main review model, verified live on
+    // openrouter.ai/models (supported_parameters includes structured_outputs)
+    // as of 2026-09-28. Keep in sync with the server registry (platform.ts).
+    defaultProvider: "openrouter",
+    defaultModel: "google/gemini-2.5-flash-lite",
   },
   {
     id: "risk_brief",

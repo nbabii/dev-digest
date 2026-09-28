@@ -9,11 +9,13 @@ import { ReviewService } from './service.js';
 
 /**
  * reviews module.
- *   POST   /pulls/:id/review  {agentId} | {all:true}  → run review(s); returns runs
+ *   POST   /pulls/:id/review              {agentId} | {all:true}  → run review(s); returns runs
  *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                             → the single-document RunTrace
  *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
  *   POST   /findings/:id/(accept|dismiss)              → finding actions
+ *   GET    /pulls/:id/intent                           → cached-or-classified Intent (see docs/plans/intent-layer.md)
+ *   POST   /pulls/:id/intent/reclassify                → force re-classify, ignoring staleness
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
 export default async function reviewsRoutes(appBase: FastifyInstance) {
@@ -138,6 +140,25 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     if (!ok) throw new NotFoundError('Review not found');
     return { ok: true };
   });
+
+  // ---- Intent (see docs/plans/intent-layer.md) -----------------------------
+  // GET is a read that may transparently classify (first view / stale PR) —
+  // no rate limit beyond the default, same as other PR reads. Reclassify is
+  // an explicit LLM-triggering action, so it gets the same tight per-route
+  // limit as manually triggering a review.
+  app.get('/pulls/:id/intent', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getIntent(workspaceId, req.params.id);
+  });
+
+  app.post(
+    '/pulls/:id/intent/reclassify',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.reclassifyIntent(workspaceId, req.params.id);
+    },
+  );
 
   // ---- Finding actions (accept / dismiss) ---------------------------------
   for (const action of FINDING_ACTIONS) {

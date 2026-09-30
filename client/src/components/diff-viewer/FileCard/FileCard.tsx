@@ -15,7 +15,10 @@ import {
   type CommentThread,
   type DiffCommentApi,
 } from "../comments";
-import { s, chevronFor } from "../styles";
+import type { FindingRecord } from "@devdigest/shared";
+import { resolveAnchors } from "../findings";
+import { s, fs, chevronFor } from "../styles";
+import { UnanchoredFindings } from "../UnanchoredFindings";
 import { CodeLine } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
 
@@ -30,11 +33,27 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+const EMPTY_FINDINGS: FindingRecord[] = [];
+
+export function FileCard({
+  file,
+  commenting,
+  findings = EMPTY_FINDINGS,
+  renderFinding,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  /** Open findings for this file (already filtered by the caller). */
+  findings?: FindingRecord[];
+  renderFinding?: (f: FindingRecord) => React.ReactNode;
+}) {
   const t = useTranslations("shell");
-  const [open, setOpen] = React.useState(
-    (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
-  );
+  // Derived, not synced: `userOpen` is null until the user toggles, so findings
+  // arriving later auto-expand the card, while a manual collapse is preserved.
+  const [userOpen, setUserOpen] = React.useState<boolean | null>(null);
+  const showFindings = !!renderFinding && findings.length > 0;
+  const open =
+    userOpen ?? (showFindings || (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
 
   // Group this file's comments into threads, then split into ones we can anchor
@@ -48,18 +67,30 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
     return partitionThreads(fileThreads, renderedKeys);
   }, [comments, file.path, lines]);
 
+  const { anchored, unanchored } = React.useMemo(
+    () => resolveAnchors(showFindings ? findings : EMPTY_FINDINGS, lines),
+    [showFindings, findings, lines],
+  );
+
   const commentCount = commenting
     ? commenting.comments.filter((c) => c.path === file.path).length
     : 0;
 
   return (
     <div style={s.fileCard}>
-      <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
+      <div onClick={() => setUserOpen(!open)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
         <span className="mono" style={s.filePath}>
           {file.path}
         </span>
+        {showFindings && (
+          <span
+            role="img"
+            style={fs.dot}
+            aria-label={t("diffViewer.fileFindings", { count: findings.length })}
+          />
+        )}
         <span className="mono tnum" style={s.fileStat}>
           <span style={s.addText}>+{file.additions}</span>{" "}
           <span style={s.delText}>−{file.deletions}</span>
@@ -85,9 +116,12 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
+                findings={ln.newNo != null && (ln.kind === "add" || ln.kind === "ctx") ? anchored.get(ln.newNo) : undefined}
+                renderFinding={renderFinding}
               />
             ))
           )}
+          {renderFinding && <UnanchoredFindings findings={unanchored} renderFinding={renderFinding} />}
           {commenting && commenting.showComments && <OutdatedComments threads={outdated} />}
         </div>
       )}

@@ -1,0 +1,26 @@
+{
+  "name": "@devdigest/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DevDigest MCP server (stdio) — thin wrapper over the running DevDigest HTTP API. Standalone package: no imports from server/, reviewer-core/ or client/.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "tsx": "^4.19.2",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "js-tiktoken": "^1.0.21",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

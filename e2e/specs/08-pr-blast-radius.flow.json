@@ -1,0 +1,16 @@
+{
+  "name": "PR detail Overview shows the Blast radius map",
+  "description": "From PR #482 (Overview is the default tab), confirm the Blast radius card lists the symbols the seeded diff touches, expand a symbol and see its caller file:line plus endpoint and cron chips. Read-only seeded data (demo repo-intel index in the seed, no model call). Assumes a freshly-seeded DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "Blast radius"], "label": "the Blast radius card renders on Overview" },
+    { "cmd": ["wait", "--text", "rateLimit"], "label": "a symbol touched by the seeded diff is listed" },
+    { "cmd": ["wait", "--text", "src/api/public/index.ts:23"], "label": "its caller renders as file:line" },
+    { "cmd": ["wait", "--text", "GET /api/public/items"], "label": "an endpoint that depends on it renders as a chip" },
+    { "cmd": ["wait", "--text", "reset-buckets (hourly)"], "label": "the cron that depends on the other symbol renders as a chip" }
+  ]
+}

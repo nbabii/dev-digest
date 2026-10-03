@@ -2,10 +2,11 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBlastService } from '../src/services/blast.js';
 import { createFindingsService } from '../src/services/findings.js';
 import { createResolver } from '../src/services/resolve.js';
 import { createRunReviewService } from '../src/services/run-review.js';
-import { ApiError, type DevDigestApi, type FindingRecord, type RunSummary } from '../src/ports.js';
+import { ApiError, type BlastRadiusReport, type DevDigestApi, type FindingRecord, type RunSummary } from '../src/ports.js';
 import { registerGetBlastRadius } from '../src/tools/get-blast-radius.js';
 import { registerGetConventions } from '../src/tools/get-conventions.js';
 import { registerGetFindings } from '../src/tools/get-findings.js';
@@ -31,6 +32,32 @@ const finding = (n: number, severity: string, extra: Partial<FindingRecord> = {}
   accepted_at: null,
   dismissed_at: null,
   ...extra,
+});
+
+const blastReport = (over: Partial<BlastRadiusReport> = {}): BlastRadiusReport => ({
+  repo: 'acme/api',
+  pr_number: 482,
+  index: { status: 'ready', indexing: false, available: true, reason: null, facts_complete: true, last_indexed_sha: 'abc123' },
+  changed_files: { total: 2, covered: 1, uncovered: ['src/new.ts'], no_symbol_touched: [], without_patch: 0, source: 'pr_files', truncated: false },
+  // Deliberately inconsistent with the arrays: consumers must pass totals through.
+  totals: { symbols: 2, callers: 14, endpoints: 3, crons: 1 },
+  symbols: [
+    {
+      name: 'rateLimit', kind: 'function', file: 'src/middleware/ratelimit.ts', line: 10, exported: true, match: 'hunk',
+      callers: [
+        { name: 'publicItems', file: 'src/api/public/index.ts', line: 23, url: 'https://github.com/acme/api/blob/abc123/src/api/public/index.ts#L23' },
+        { name: 'hook', file: 'src/api/hook.ts', line: 5, url: 'https://github.com/acme/api/blob/abc123/src/api/hook.ts#L5' },
+      ],
+      callers_total: 12, endpoints_total: 3, crons_total: 1,
+      endpoints_affected: ['GET /api/public/items'], crons_affected: ['reset-buckets (hourly)'],
+    },
+    {
+      name: 'bucketKey', kind: 'function', file: 'src/middleware/ratelimit.ts', line: 40, exported: true, match: 'file',
+      callers: [], callers_total: 0, endpoints_total: 0, crons_total: 0, endpoints_affected: [], crons_affected: [],
+    },
+  ],
+  limits: { symbols_truncated: false, callers_truncated: false },
+  ...over,
 });
 
 type Fake = { [K in keyof DevDigestApi]: ReturnType<typeof vi.fn> };
@@ -62,6 +89,7 @@ function makeApi(): Fake {
       },
     ]),
     conventions: vi.fn(async () => ({ scan: null, candidates: [] })),
+    blastRadius: vi.fn(async () => blastReport()),
   } as Fake;
 }
 
@@ -70,6 +98,7 @@ async function connect(api: Fake) {
   const resolver = createResolver(port);
   const deps = {
     findings: createFindingsService(port, resolver),
+    blast: createBlastService(port, resolver),
     runReview: createRunReviewService(port, resolver, { waitMs: 3, pollMs: 1, sleep: async () => {}, now: (() => { let t = 0; return () => t++; })() }),
     baseUrl: 'http://localhost:3001',
   };
@@ -200,10 +229,97 @@ describe('tools', () => {
     expect(r.isError).toBeFalsy();
   });
 
-  it('get_blast_radius is static and makes zero port calls', async () => {
+  it('get_blast_radius: one port call, totals pass through, concise shape', async () => {
     const r = await call(client, 'get_blast_radius', { repo: 'acme/api', pr: 482 });
-    expect(r.structuredContent).toEqual({ status: 'not_implemented' });
-    for (const fn of Object.values(api)) expect(fn).not.toHaveBeenCalled();
+    expect(api.blastRadius).toHaveBeenCalledTimes(1);
+    expect(api.blastRadius).toHaveBeenCalledWith(PR_ID);
+    expect(r.isError).toBeFalsy();
+    const d = r.structuredContent;
+    expect(d.status).toBe('ok');
+    expect(d.totals).toEqual({ symbols: 2, callers: 14, endpoints: 3, crons: 1 });
+    expect(d.symbols).toHaveLength(2);
+    expect(d.symbols[0].callers).toEqual(['src/api/public/index.ts:23', 'src/api/hook.ts:5']);
+    expect(d.symbols[0].endpoints).toEqual(['GET /api/public/items']);
+    expect(d.symbols[0].match).toBeUndefined();
+    expect(d.symbols[1].match).toBe('file');
+    expect(r.content[0]!.text).toBe('acme/api#482 · 2 symbols · 14 callers · 3 endpoints · 1 cron · index ready');
+    expect(r.content[0]!.text).not.toContain('{');
+  });
+
+  it('get_blast_radius: detailed adds caller objects with urls; symbol filters', async () => {
+    const r = await call(client, 'get_blast_radius', { repo: 'acme/api', pr: 482, response_format: 'detailed', symbol: 'RATELIMIT' });
+    const d = r.structuredContent;
+    expect(d.symbols).toHaveLength(1);
+    expect(d.symbols[0]).toMatchObject({ kind: 'function', line: 10, exported: true });
+    expect(d.symbols[0].callers[0]).toEqual({
+      name: 'publicItems', file: 'src/api/public/index.ts', line: 23,
+      url: 'https://github.com/acme/api/blob/abc123/src/api/public/index.ts#L23',
+    });
+    expect(d.totals.symbols).toBe(2);
+  });
+
+  it('get_blast_radius: unknown symbol gives a hint, not an error', async () => {
+    const r = await call(client, 'get_blast_radius', { repo: 'acme/api', pr: 482, symbol: 'nope' });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent.symbols).toEqual([]);
+    expect(r.structuredContent.hint).toContain('nope');
+  });
+
+  it.each([
+    ['not_indexed', false, 'not indexed'],
+    ['not_indexed', true, 'indexing in progress'],
+    ['degraded', false, 'degraded'],
+    ['disabled', false, 'disabled'],
+  ])('get_blast_radius: %s (indexing=%s) is data with a hint, not an error', async (status, indexing, text) => {
+    api.blastRadius.mockResolvedValueOnce(
+      blastReport({
+        index: { status, indexing, available: false, reason: null, facts_complete: false, last_indexed_sha: null },
+        symbols: [],
+        totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0 },
+      }),
+    );
+    const r = await call(client, 'get_blast_radius', { repo: 'acme/api', pr: 482 });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent.status).toBe('index_unavailable');
+    expect(r.structuredContent.hint).toContain(text);
+  });
+
+  it('get_blast_radius: partial index flags incomplete facts; no changed files has its own status', async () => {
+    api.blastRadius.mockResolvedValueOnce(
+      blastReport({ index: { status: 'partial', indexing: false, available: true, reason: 'soft_budget', facts_complete: false, last_indexed_sha: 'a' } }),
+    );
+    const p = await call(client, 'get_blast_radius', { repo: 'acme/api', pr: 482 });
+    expect(p.structuredContent.status).toBe('ok');
+    expect(p.structuredContent.hint).toContain('endpoints/crons may be incomplete');
+
+    api.blastRadius.mockResolvedValueOnce(
+      blastReport({ changed_files: { total: 0, covered: 0, uncovered: [], no_symbol_touched: [], without_patch: 0, source: 'none', truncated: false }, symbols: [] }),
+    );
+    const n = await call(client, 'get_blast_radius', { repo: 'acme/api', pr: 482 });
+    expect(n.structuredContent.status).toBe('no_changed_files');
+    expect(n.structuredContent.hint).toContain('open the PR once');
+  });
+
+  it('get_blast_radius: API errors go through toToolError', async () => {
+    api.blastRadius.mockRejectedValueOnce(new ApiError('http', 'Pull request not found', { status: 404 }));
+    const r = await call(client, 'get_blast_radius', { repo: 'acme/api', pr: 482 });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain('HTTP 404');
+  });
+
+  it('get_blast_radius: oversized response is capped with a symbol= hint and keeps totals', async () => {
+    const big = Array.from({ length: 60 }, (_, i) => ({
+      name: `sym${i}`, kind: 'function', file: `src/f${i}.ts`, line: i, exported: true, match: 'hunk',
+      callers: Array.from({ length: 20 }, (_, j) => ({ name: `c${j}`, file: `src/caller${i}_${j}.ts`, line: j + 1, url: `https://github.com/acme/api/blob/abc/src/caller${i}_${j}.ts#L${j + 1}` })),
+      callers_total: 20, endpoints_total: 0, crons_total: 0, endpoints_affected: [], crons_affected: [],
+    }));
+    api.blastRadius.mockResolvedValueOnce(blastReport({ symbols: big, totals: { symbols: 30, callers: 600, endpoints: 0, crons: 0 } }));
+    const r = await call(client, 'get_blast_radius', { repo: 'acme/api', pr: 482, response_format: 'detailed' });
+    expect(r.structuredContent.truncated).toBe(true);
+    expect(r.structuredContent.hint).toContain('symbol=<name>');
+    expect(r.structuredContent.hint).not.toContain('severity');
+    expect(r.structuredContent.totals.callers).toBe(600);
+    expect(r.structuredContent.symbols.length).toBeLessThan(60);
   });
 
   it('rejects invalid input', async () => {

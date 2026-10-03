@@ -17,6 +17,12 @@ import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
+import {
+  BLAST_MAX_CALLER_ROWS,
+  INDEX_JOB_KIND,
+  REFRESH_JOB_KIND,
+  RESYNC_JOB_KIND,
+} from './constants.js';
 import type { DegradedReason, FileRankRow, IndexState, IndexStatus } from './types.js';
 
 /** Chunk size for batched inserts — same value blast already uses. */
@@ -126,6 +132,8 @@ export interface FullSymbolRow {
 export interface ResolvedCallerRow {
   fromPath: string;
   toSymbol: string;
+  /** File that declares `toSymbol` (always set: only resolved references are read). */
+  declFile: string;
   line: number;
   rank: number;
 }
@@ -211,7 +219,17 @@ export class RepoIntelRepository {
       if (!row) return null;
       const stats = (row.stats ?? {}) as Record<string, unknown>;
       const durationMs = typeof stats.durationMs === 'number' ? stats.durationMs : 0;
-      const reason = typeof stats.reason === 'string' ? stats.reason : undefined;
+      // The pipeline records why a partial index stopped in dedicated flags,
+      // not in `stats.reason`; project them so consumers can tell "no facts
+      // were written" from "genuinely nothing there".
+      const reason =
+        typeof stats.reason === 'string'
+          ? stats.reason
+          : stats.softBudgetReached
+            ? 'soft_budget'
+            : stats.graphFailed
+              ? 'graph_failed'
+              : undefined;
       // A persisted row is the "real" index state. We only mark it `degraded`
       // when the indexer itself stamped status='degraded'|'failed' (e.g. the
       // graph fell over). 'partial' is still a working index — no degraded flag.
@@ -506,10 +524,11 @@ export class RepoIntelRepository {
     names: string[],
   ): Promise<ResolvedCallerRow[]> {
     if (declFiles.length === 0 || names.length === 0) return [];
-    return this.db
+    const rows = await this.db
       .select({
         fromPath: t.references.fromPath,
         toSymbol: t.references.toSymbol,
+        declFile: t.references.declFile,
         line: t.references.line,
         rank: t.fileRank.rank,
       })
@@ -527,7 +546,34 @@ export class RepoIntelRepository {
           inArray(t.references.declFile, declFiles),
           inArray(t.references.toSymbol, names),
         ),
-      );
+      )
+      .orderBy(desc(t.fileRank.rank), asc(t.references.fromPath), asc(t.references.line))
+      .limit(BLAST_MAX_CALLER_ROWS);
+    // `decl_file` is non-null by the WHERE (inArray never matches NULL).
+    return rows.map((r) => ({ ...r, declFile: r.declFile as string }));
+  }
+
+  /**
+   * True while an index / refresh / resync job for the repo is queued or
+   * running. Swallows errors (returns false) like `tryGetIndexState`.
+   */
+  async hasActiveIndexJob(repoId: string): Promise<boolean> {
+    try {
+      const rows = await this.db
+        .select({ id: t.jobs.id })
+        .from(t.jobs)
+        .where(
+          and(
+            inArray(t.jobs.kind, [INDEX_JOB_KIND, REFRESH_JOB_KIND, RESYNC_JOB_KIND]),
+            inArray(t.jobs.status, ['queued', 'running']),
+            sql`${t.jobs.payload}->>'repoId' = ${repoId}`,
+          ),
+        )
+        .limit(1);
+      return rows.length > 0;
+    } catch {
+      return false;
+    }
   }
 
   /** Per-file facts (endpoints/crons) for the given files. */

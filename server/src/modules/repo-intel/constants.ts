@@ -30,6 +30,12 @@ export const EXCLUDED_DIRS = [
 export const MAX_CALLERS_PER_SYMBOL = 20;
 
 /**
+ * SQL hard cap on resolved caller rows read by `getBlastRadius` (a hub symbol
+ * must not flood memory). When it is hit, `BlastResult.callersTruncated` is set.
+ */
+export const BLAST_MAX_CALLER_ROWS = 5000;
+
+/**
  * [T1] Bumped whenever the AST extractor or symbol schema changes. A mismatch
  * with `repo_index_state.indexer_version` forces a full reindex.
  *

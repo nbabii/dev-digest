@@ -47,6 +47,7 @@ import {
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
   INDEX_JOB_KIND,
   INDEXER_VERSION,
+  BLAST_MAX_CALLER_ROWS,
   MAX_CALLERS_PER_SYMBOL,
   REFRESH_JOB_KIND,
   RESYNC_JOB_KIND,
@@ -188,7 +189,9 @@ export class RepoIntelService implements RepoIntel {
    */
   async getIndexState(repoId: string): Promise<IndexState> {
     const persisted = await this.repo.tryGetIndexState(repoId);
-    if (persisted) return persisted;
+    if (persisted) {
+      return { ...persisted, indexing: await this.repo.hasActiveIndexJob(repoId) };
+    }
     return {
       repoId,
       status: 'degraded',
@@ -358,17 +361,20 @@ export class RepoIntelService implements RepoIntel {
         enclosingFromRows(symsByFile.get(c.fromPath) ?? [], c.line) ??
         c.fromPath.split('/').pop() ??
         c.fromPath;
-      const key = `${c.fromPath}|${enclosing}|${c.toSymbol}`;
+      const key = `${c.fromPath}|${enclosing}|${c.declFile}|${c.toSymbol}`;
       if (seenCaller.has(key)) continue;
       seenCaller.add(key);
       callers.push({
         file: c.fromPath,
         symbol: enclosing,
         viaSymbol: c.toSymbol,
+        declFile: c.declFile,
         line: c.line,
         rank: c.rank,
       });
     }
+    // Row order from SQL is already rank desc, path, line; the stable sort
+    // keeps that tie-break. Per-symbol caps are the consumer's job (blast).
     callers.sort((a, b) => b.rank - a.rank);
 
     // Precomputed facts per caller file (endpoints + crons), so consumers can
@@ -383,9 +389,10 @@ export class RepoIntelService implements RepoIntel {
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers,
       impactedEndpoints: [...endpoints],
       factsByFile,
+      callersTruncated: callerRows.length >= BLAST_MAX_CALLER_ROWS,
       degraded: false,
     };
   }
@@ -433,6 +440,7 @@ export class RepoIntelService implements RepoIntel {
       exported: r.exported,
       startLine: r.line ?? 0,
       endLine: r.endLine ?? r.line ?? 0,
+      rangeKnown: r.line != null && r.endLine != null,
       signature: r.signature,
     }));
   }

@@ -1,15 +1,95 @@
 {
+  "card": {
+    "title": "Blast radius",
+    "snapshotFootnote": "Based on the default-branch index at {sha}; code added in this PR is not included.",
+    "snapshotFootnoteNoSha": "Based on the default-branch index; code added in this PR is not included.",
+    "mayDepend": "May depend on",
+    "mayDependHint": "Endpoints and crons come from the files that call this symbol, so they are possible dependents, not confirmed ones.",
+    "wholeFile": "whole file",
+    "wholeFileHint": "Whole file: no diff available, every symbol in this file is shown.",
+    "showMoreSymbols": "{count, plural, one {Show # more symbol} other {Show # more symbols}}",
+    "showingOf": "Showing {shown} of {total} symbols",
+    "moreCallers": "{count, plural, one {+# more caller} other {+# more callers}}",
+    "moreChips": "+{count} more",
+    "noCallers": "No direct callers found.",
+    "callersUnknown": "No callers listed, but the index is incomplete, so this is not a guarantee.",
+    "loading": "Loading blast radius",
+    "callerLinkLabel": "Open {file} line {line} on GitHub, new tab",
+    "callersList": "Callers of {symbol}",
+    "reanalyze": "Re-analyze",
+    "reanalyzing": "Re-analyzing...",
+    "showAllFiles": "{count, plural, one {Show # more file} other {Show # more files}}",
+    "showFewerFiles": "Show fewer"
+  },
   "stat": {
-    "symbols": "symbols",
-    "callers": "callers",
-    "endpoints": "endpoints",
-    "crons": "cron/jobs"
+    "symbols": "{count, plural, one {symbol} other {symbols}}",
+    "callers": "{count, plural, one {caller} other {callers}}",
+    "endpoints": "{count, plural, one {endpoint} other {endpoints}}",
+    "crons": "{count, plural, one {cron/job} other {crons/jobs}}"
+  },
+  "callerCount": "{count, plural, one {# caller} other {# callers}}",
+  "error": {
+    "title": "Could not load the blast radius",
+    "body": "The impact map could not be read. Try again."
+  },
+  "state": {
+    "disabled": {
+      "title": "Repo analysis is turned off",
+      "body": "Repo Intel is disabled, so the impact of this PR cannot be mapped."
+    },
+    "notIndexed": {
+      "title": "This repo is not indexed yet",
+      "body": "Index the repo to see which callers, endpoints and crons this PR can affect."
+    },
+    "indexing": {
+      "title": "Indexing in progress",
+      "body": "The repo is being indexed. This card updates on its own when it finishes."
+    },
+    "reindexing": {
+      "title": "Re-indexing",
+      "body": "The repo is being re-indexed; the data below may change shortly."
+    },
+    "degraded": {
+      "title": "The index is unavailable",
+      "body": "The last index run did not produce usable data, so the impact cannot be mapped. Re-analyze to try again."
+    },
+    "partial": {
+      "title": "Partial index",
+      "body": "Some files were not indexed. The results below may be missing callers."
+    },
+    "factsIncomplete": {
+      "title": "Index incomplete",
+      "body": "Endpoint and cron data was not fully indexed, so these results may miss dependents."
+    },
+    "noChangedFiles": {
+      "title": "No changed files found",
+      "body": "DevDigest has no file list for this PR yet. Open the Diff tab once, then come back."
+    },
+    "noSymbols": {
+      "title": "No indexed symbols in the changed files",
+      "body": "The changed files contain no indexed symbols. Only TypeScript and JavaScript are indexed, so this is not proof of no impact."
+    },
+    "noSymbolTouched": {
+      "title": "The diff touches no declared symbol",
+      "body": "{count, plural, one {The diff only touches imports or top-level code in # file.} other {The diff only touches imports or top-level code in # files.}}"
+    },
+    "zeroCallers": {
+      "title": "No callers found",
+      "body": "Nothing in the index calls the changed symbols."
+    },
+    "zeroCallersIncomplete": {
+      "title": "Callers unknown",
+      "body": "No callers were found, but the index is incomplete, so this is not proof that nothing is affected."
+    },
+    "uncovered": {
+      "title": "Not covered by the index",
+      "body": "{count, plural, one {# changed file is} other {# changed files are}} not in the index (new, or an unsupported language)."
+    }
   },
   "view": {
     "tree": "tree",
     "graph": "graph"
   },
-  "callerCount": "{count} callers",
   "noDownstream": "{count} changed symbol(s), no downstream callers found.",
   "graph": {
     "empty": "No downstream callers to graph.",

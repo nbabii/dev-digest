@@ -4,6 +4,7 @@ import {
   Finding,
   Intent,
   BlastRadius,
+  BlastRadiusReport,
   Risks,
   PrHistory,
   SmartDiff,
@@ -109,6 +110,88 @@ describe('AI contracts parse fixtures', () => {
         ],
       }),
     ).not.toThrow();
+  });
+
+  it('BlastRadiusReport (ready + not_indexed)', () => {
+    const base = {
+      repo: 'acme/payments-api',
+      pr_id: '00000000-0000-0000-0000-000000000001',
+      pr_number: 482,
+    };
+    const ready = BlastRadiusReport.parse({
+      ...base,
+      index: {
+        status: 'ready',
+        indexing: false,
+        available: true,
+        reason: null,
+        facts_complete: true,
+        last_indexed_sha: 'abc123',
+        indexed_at: '2026-10-03T00:00:00.000Z',
+      },
+      changed_files: {
+        total: 2,
+        covered: 1,
+        uncovered: ['src/new.ts'],
+        no_symbol_touched: [],
+        without_patch: 0,
+        source: 'pr_files',
+        truncated: false,
+      },
+      totals: { symbols: 1, callers: 1, endpoints: 1, crons: 1 },
+      symbols: [
+        {
+          symbol: 'rateLimit',
+          callers: [
+            {
+              name: 'publicRouter',
+              file: 'src/api/public/index.ts',
+              line: 23,
+              url: 'https://github.com/acme/payments-api/blob/abc123/src/api/public/index.ts#L23',
+            },
+          ],
+          endpoints_affected: ['GET /api/public/items'],
+          crons_affected: ['reset-buckets (hourly)'],
+          file: 'src/middleware/ratelimit.ts',
+          kind: 'function',
+          line: 10,
+          exported: true,
+          match: 'hunk',
+          callers_total: 1,
+          endpoints_total: 1,
+          crons_total: 1,
+        },
+      ],
+      limits: { symbols_truncated: false, callers_truncated: false },
+    });
+    expect(ready.symbols[0]!.match).toBe('hunk');
+
+    const empty = BlastRadiusReport.parse({
+      ...base,
+      index: {
+        status: 'not_indexed',
+        indexing: false,
+        available: false,
+        reason: null,
+        facts_complete: false,
+        last_indexed_sha: null,
+        indexed_at: null,
+      },
+      changed_files: {
+        total: 0,
+        covered: 0,
+        uncovered: [],
+        no_symbol_touched: [],
+        without_patch: 0,
+        source: 'none',
+        truncated: false,
+      },
+      totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0 },
+      symbols: [],
+      limits: { symbols_truncated: false, callers_truncated: false },
+    });
+    expect(empty.index.status).toBe('not_indexed');
+    expect(() => BlastRadiusReport.parse({ ...empty, index: { ...empty.index, status: 'nope' } })).toThrow();
   });
 
   it('SmartDiff (data.jsx DIFF)', () => {

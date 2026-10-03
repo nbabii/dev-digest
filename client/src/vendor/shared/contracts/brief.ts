@@ -54,6 +54,65 @@ export const BlastRadius = z.object({
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 
+// ---- Blast radius report (GET /pulls/:id/blast-radius) ----
+export const BlastIndexStatus = z.enum(['ready', 'partial', 'degraded', 'not_indexed', 'disabled']);
+export type BlastIndexStatus = z.infer<typeof BlastIndexStatus>;
+
+export const BlastIndex = z.object({
+  status: BlastIndexStatus,
+  indexing: z.boolean(),
+  available: z.boolean(),
+  reason: z.string().nullable(),
+  facts_complete: z.boolean(),
+  last_indexed_sha: z.string().nullable(),
+  indexed_at: z.string().nullable(),
+});
+export type BlastIndex = z.infer<typeof BlastIndex>;
+
+export const BlastCallerLink = BlastCaller.extend({ url: z.string() });
+export type BlastCallerLink = z.infer<typeof BlastCallerLink>;
+
+export const BlastSymbolImpact = DownstreamImpact.extend({
+  file: z.string(),
+  kind: z.string(),
+  line: z.number().int().nullable(),
+  exported: z.boolean(),
+  match: z.enum(['hunk', 'file']), // 'file' = per-file fallback (no usable patch/range)
+  callers: z.array(BlastCallerLink),
+  callers_total: z.number().int(),
+  endpoints_total: z.number().int(),
+  crons_total: z.number().int(),
+});
+export type BlastSymbolImpact = z.infer<typeof BlastSymbolImpact>;
+
+export const BlastChangedFiles = z.object({
+  total: z.number().int(),
+  covered: z.number().int(),
+  uncovered: z.array(z.string()),
+  no_symbol_touched: z.array(z.string()),
+  without_patch: z.number().int(),
+  source: z.enum(['pr_files', 'git', 'github', 'none']),
+  truncated: z.boolean(),
+});
+export type BlastChangedFiles = z.infer<typeof BlastChangedFiles>;
+
+export const BlastRadiusReport = z.object({
+  repo: z.string(),
+  pr_id: z.string(),
+  pr_number: z.number().int(),
+  index: BlastIndex,
+  changed_files: BlastChangedFiles,
+  totals: z.object({
+    symbols: z.number().int(),
+    callers: z.number().int(),
+    endpoints: z.number().int(),
+    crons: z.number().int(),
+  }),
+  symbols: z.array(BlastSymbolImpact),
+  limits: z.object({ symbols_truncated: z.boolean(), callers_truncated: z.boolean() }),
+});
+export type BlastRadiusReport = z.infer<typeof BlastRadiusReport>;
+
 // ---- Risks ----
 export const RiskSeverity = z.enum(['high', 'medium', 'low']);
 export type RiskSeverity = z.infer<typeof RiskSeverity>;

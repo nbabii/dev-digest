@@ -38,7 +38,20 @@ touch the pipeline internals:
 - `getRepoMap(repoId)` → the cached repo skeleton (fed into the **review prompt**).
 - `getFileRank(repoId, files)` → importance percentile per changed file.
 - `getCallerSignatures(repoId, files, limit)` → callers of changed symbols.
-- `getBlastRadius(repoId, files)` → impacted symbols / callers (used by L04).
+- `getBlastRadius(repoId, files)` → impacted symbols / callers. Consumed by
+  `modules/blast` (`GET /pulls/:id/blast-radius`). On the persistent path it
+  returns **every** resolved caller row (capped only by a SQL hard cap,
+  `BLAST_MAX_CALLER_ROWS = 5000`, which sets `callersTruncated`); the per-symbol
+  cap (`MAX_CALLERS_PER_SYMBOL`) is the consumer's job, not applied globally.
+  Caller rows carry `declFile` so consumers can group by `(declFile, symbol)`.
+  Without a usable index it silently falls back to ripgrep over the clone and
+  returns `degraded: true` — read-only consumers must check `getIndexState`
+  first and treat `degraded` as "not available" (blast does).
+- `getIndexState(repoId)` → status plus `indexing?: boolean` (true while an
+  index/refresh/resync job for the repo is queued or running; the repo can still
+  have a usable index at the same time). For a `partial` index, `reason` is
+  `soft_budget` or `graph_failed` when the pipeline stopped for that cause: in
+  both cases `file_facts` / graph-derived data is incomplete.
 - `getUnresolvedReferences(repoId, …)` → phantom-symbol detection (used by L06).
 - `getConventionSamples(repoId)` → top-ranked files for convention extraction (L02).
 
@@ -51,3 +64,7 @@ and a per-agent `repo_intel` flag.
 
 - `GET /repos/:id/index-state` — index status (drives the **Indexed** badge).
 - `POST /repos/:id/resync` — enqueue a re-index.
+
+There are no blast routes here: the PR-scoped read lives in `modules/blast`
+(`GET /pulls/:id/blast-radius`), because resolving a PR's changed files and
+workspace scoping are PR concerns and this module is PR- and tenant-agnostic.

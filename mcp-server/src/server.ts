@@ -2,6 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { POLL_MS, RUN_WAIT_MS } from './constants.js';
 import type { DevDigestApi } from './ports.js';
+import { createBlastService } from './services/blast.js';
 import { createFindingsService } from './services/findings.js';
 import { createResolver } from './services/resolve.js';
 import { createRunReviewService } from './services/run-review.js';
@@ -33,6 +34,7 @@ export function buildMcpServer(opts: BuildMcpServerOptions): McpServer {
 
   const resolver = createResolver(opts.api, opts.now ? { now: opts.now } : {});
   const findings = createFindingsService(opts.api, resolver);
+  const blast = createBlastService(opts.api, resolver);
   const runReview = createRunReviewService(opts.api, resolver, {
     waitMs: opts.waitMs ?? RUN_WAIT_MS,
     pollMs: opts.pollMs ?? POLL_MS,
@@ -40,7 +42,7 @@ export function buildMcpServer(opts: BuildMcpServerOptions): McpServer {
     ...(opts.now && { now: opts.now }),
   });
 
-  const deps: ToolDeps = { findings, runReview, baseUrl: opts.baseUrl };
+  const deps: ToolDeps = { findings, blast, runReview, baseUrl: opts.baseUrl };
   registerListAgents(server, deps);
   registerRunAgentOnPr(server, deps);
   registerGetFindings(server, deps);

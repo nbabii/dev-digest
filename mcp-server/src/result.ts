@@ -25,12 +25,16 @@ function truncateStrings(value: unknown, max: number): unknown {
 }
 
 /** Keeps the serialised payload within MAX_RESPONSE_TOKENS: shorten text, then drop trailing items. */
-export function capResponse<T extends Record<string, unknown>>(data: T, maxTokens = MAX_RESPONSE_TOKENS): T {
+export function capResponse<T extends Record<string, unknown>>(
+  data: T,
+  maxTokens = MAX_RESPONSE_TOKENS,
+  opts: { narrowHint?: string } = {},
+): T {
   if (size(data) <= maxTokens) return data;
 
   let out = data as Record<string, unknown>;
   out = truncateStrings(out, 500) as Record<string, unknown>;
-  if (size(out) <= maxTokens) return markTruncated(out, undefined, 0, 0) as T;
+  if (size(out) <= maxTokens) return markTruncated(out, undefined, 0, 0, opts.narrowHint) as T;
 
   // Trim the array that dominates the payload.
   let key: string | undefined;
@@ -44,7 +48,7 @@ export function capResponse<T extends Record<string, unknown>>(data: T, maxToken
       }
     }
   }
-  if (!key) return markTruncated(truncateStrings(out, 120) as Record<string, unknown>, undefined, 0, 0) as T;
+  if (!key) return markTruncated(truncateStrings(out, 120) as Record<string, unknown>, undefined, 0, 0, opts.narrowHint) as T;
 
   const items = out[key] as unknown[];
   let lo = 0;
@@ -54,17 +58,25 @@ export function capResponse<T extends Record<string, unknown>>(data: T, maxToken
     if (size({ ...out, [key]: items.slice(0, mid), truncated: true, hint: '' }) <= maxTokens - 100) lo = mid;
     else hi = mid - 1;
   }
-  return markTruncated({ ...out, [key]: items.slice(0, lo) }, key, items.length, lo) as T;
+  return markTruncated({ ...out, [key]: items.slice(0, lo) }, key, items.length, lo, opts.narrowHint) as T;
 }
 
-function markTruncated(out: Record<string, unknown>, key: string | undefined, before: number, kept: number): Record<string, unknown> {
+const DEFAULT_NARROW_HINT = 'narrow with severity=critical or pass cursor';
+
+function markTruncated(
+  out: Record<string, unknown>,
+  key: string | undefined,
+  before: number,
+  kept: number,
+  narrowHint: string = DEFAULT_NARROW_HINT,
+): Record<string, unknown> {
   const result: Record<string, unknown> = { ...out, truncated: true };
   if (!key) {
     result.hint = 'response shortened to fit the size limit, narrow the request';
     return result;
   }
   const total = typeof out.total === 'number' ? out.total : before;
-  result.hint = `showing ${kept} of ${total}, narrow with severity=critical or pass cursor`;
+  result.hint = `showing ${kept} of ${total}, ${narrowHint}`;
   // Re-point an existing offset cursor at the first dropped item.
   if (typeof out.next_cursor === 'string' && kept < before) {
     try {

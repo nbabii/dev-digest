@@ -1,7 +1,7 @@
 // Pure domain-shaped logic: no MCP SDK, no I/O. Invariants are plain TypeScript.
 import { DEFAULT_LIMIT, MAX_LIMIT, MAX_RATIONALE_CHARS, MAX_SUGGESTION_CHARS, MAX_TITLE_CHARS } from './constants.js';
 import { McpToolError } from './errors.js';
-import type { Agent, FindingRecord, ReviewRecord } from './ports.js';
+import type { Agent, BlastRadiusReport, BlastSymbolWire, FindingRecord, ReviewRecord } from './ports.js';
 
 // ---- severity -------------------------------------------------------------
 
@@ -206,4 +206,85 @@ export function projectAgent(a: Agent): AgentView {
     model: a.model,
     enabled: a.enabled,
   };
+}
+
+// ---- blast radius ---------------------------------------------------------
+
+export interface ShapedBlastSymbol {
+  name: string;
+  file: string;
+  callers: Array<string | { name: string; file: string; line: number; url: string }>;
+  callers_total: number;
+  endpoints: string[];
+  crons: string[];
+  endpoints_total: number;
+  crons_total: number;
+  match?: 'file';
+  kind?: string;
+  line?: number | null;
+  exported?: boolean;
+}
+
+export interface ShapedBlast {
+  repo: string;
+  pr: number;
+  index: BlastRadiusReport['index'];
+  changed_files: BlastRadiusReport['changed_files'];
+  /** Passed through from the API, never recomputed from the (capped) arrays. */
+  totals: BlastRadiusReport['totals'];
+  limits: BlastRadiusReport['limits'];
+  symbols: ShapedBlastSymbol[];
+}
+
+function shapeBlastSymbol(s: BlastSymbolWire, detailed: boolean): ShapedBlastSymbol {
+  const out: ShapedBlastSymbol = {
+    name: s.name,
+    file: s.file,
+    callers: detailed
+      ? s.callers.map((c) => ({ name: c.name, file: c.file, line: c.line, url: c.url }))
+      : s.callers.map((c) => `${c.file}:${c.line}`),
+    callers_total: s.callers_total,
+    endpoints: s.endpoints_affected,
+    crons: s.crons_affected,
+    endpoints_total: s.endpoints_total,
+    crons_total: s.crons_total,
+  };
+  if (s.match === 'file') out.match = 'file';
+  if (detailed) {
+    out.kind = s.kind;
+    out.line = s.line;
+    out.exported = s.exported;
+  }
+  return out;
+}
+
+/** Every symbol and caller the API returned is kept; `symbol` narrows to one exact name (case-insensitive). */
+export function shapeBlast(
+  report: BlastRadiusReport,
+  opts: { format?: ResponseFormat; symbol?: string } = {},
+): ShapedBlast {
+  const detailed = opts.format === 'detailed';
+  const wanted = opts.symbol?.trim().toLowerCase();
+  const symbols = report.symbols
+    .filter((s) => !wanted || s.name.toLowerCase() === wanted)
+    .map((s) => shapeBlastSymbol(s, detailed));
+  return {
+    repo: report.repo,
+    pr: report.pr_number,
+    index: report.index,
+    changed_files: report.changed_files,
+    totals: report.totals,
+    limits: report.limits,
+    symbols,
+  };
+}
+
+const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
+
+/** One short line for `content`; numbers come from `totals`. */
+export function blastSummaryLine(b: ShapedBlast): string {
+  const idx = b.index.indexing ? `index ${b.index.status}, indexing` : `index ${b.index.status}`;
+  if (!b.index.available) return `${b.repo}#${b.pr} · ${idx}`;
+  const t = b.totals;
+  return `${b.repo}#${b.pr} · ${plural(t.symbols, 'symbol')} · ${plural(t.callers, 'caller')} · ${plural(t.endpoints, 'endpoint')} · ${plural(t.crons, 'cron')} · ${idx}`;
 }

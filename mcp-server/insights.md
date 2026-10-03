@@ -21,6 +21,7 @@ references the old one. Check this file before deep-diving in this module.
 
 ## Codebase Patterns & Tool Notes
 
+- **2026-10-03** — `capResponse` replaces `hint` when it truncates, so `get_blast_radius` re-appends its state hint (index/partial) after capping, and passes `{ narrowHint: 'narrow with symbol=<name>' }` since the default tail mentions `severity=critical` (`src/tools/get-blast-radius.ts`, `src/result.ts`). Blast `totals` are passed through from the API, never summed from the capped arrays.
 - **2026-09-30** — The MCP SDK (1.31) peers on `zod ^3.25 || ^4`, so this package pins `zod ^3.25.0`, not the `^3.24.1` used in `server/`.
 - **2026-09-30** — The API's finding severities are only `CRITICAL|WARNING|SUGGESTION` (`server/src/vendor/shared/contracts/findings.ts`); an earlier plan draft listed an `info` level that does not exist.
 

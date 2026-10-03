@@ -51,6 +51,11 @@ describe('capResponse', () => {
     expect(out.findings[0]).toEqual(big.findings[0]);
   });
 
+  it('lets the caller override the narrowing hint', () => {
+    const out = capResponse(big, undefined, { narrowHint: 'narrow with symbol=<name>' }) as Record<string, any>;
+    expect(out.hint).toMatch(/^showing \d+ of 1000, narrow with symbol=<name>$/);
+  });
+
   it('re-points next_cursor at the first dropped item', () => {
     const out = capResponse({ ...big, findings: big.findings.slice(0, 500), total: 1000, next_cursor: encodeCursor(500) }) as Record<string, any>;
     expect(decodeCursor(out.next_cursor)).toBe(out.findings.length);

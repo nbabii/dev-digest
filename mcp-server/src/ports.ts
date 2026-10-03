@@ -142,6 +142,55 @@ export interface ConventionsResult {
   candidates: ConventionCandidate[];
 }
 
+/** Blast-radius wire type: only fields the MCP server reads (GET /pulls/:id/blast-radius). */
+export interface BlastCallerWire {
+  name: string;
+  file: string;
+  line: number;
+  url: string;
+}
+
+export interface BlastSymbolWire {
+  name: string;
+  kind: string;
+  file: string;
+  line: number | null;
+  exported: boolean;
+  /** 'file' = per-file fallback (no usable patch/range). */
+  match: Open<'hunk' | 'file'>;
+  callers: BlastCallerWire[];
+  callers_total: number;
+  endpoints_total: number;
+  crons_total: number;
+  endpoints_affected: string[];
+  crons_affected: string[];
+}
+
+export interface BlastRadiusReport {
+  repo: string;
+  pr_number: number;
+  index: {
+    status: Open<'ready' | 'partial' | 'degraded' | 'not_indexed' | 'disabled'>;
+    indexing: boolean;
+    available: boolean;
+    reason: string | null;
+    facts_complete: boolean;
+    last_indexed_sha: string | null;
+  };
+  changed_files: {
+    total: number;
+    covered: number;
+    uncovered: string[];
+    no_symbol_touched: string[];
+    without_patch: number;
+    source: Open<'pr_files' | 'git' | 'github' | 'none'>;
+    truncated: boolean;
+  };
+  totals: { symbols: number; callers: number; endpoints: number; crons: number };
+  symbols: BlastSymbolWire[];
+  limits: { symbols_truncated: boolean; callers_truncated: boolean };
+}
+
 export interface DevDigestApi {
   listRepos(): Promise<Repo[]>;
   listPulls(repoId: string): Promise<PrMeta[]>;
@@ -151,4 +200,5 @@ export interface DevDigestApi {
   listRuns(prId: string): Promise<RunSummary[]>;
   reviewsForPull(prId: string): Promise<ReviewRecord[]>;
   conventions(repoId: string): Promise<ConventionsResult>;
+  blastRadius(prId: string): Promise<BlastRadiusReport>;
 }

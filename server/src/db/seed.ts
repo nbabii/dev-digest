@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
@@ -9,6 +9,7 @@ import {
   TEST_QUALITY_REVIEWER_PROMPT,
   API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { INDEXER_VERSION } from '../modules/repo-intel/constants.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -179,6 +180,134 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         confidence: 0.86,
       },
     ]);
+  }
+
+  // ---- Demo repo-intel index for acme/payments-api (Blast radius card) ----
+  // Seeded unconditionally so the PR #482 Overview "Blast radius" card (and the
+  // e2e flow) shows real data instead of "not indexed". The demo repo has no
+  // clone, so nothing else would ever index it. Idempotent: the patch update
+  // only fills a NULL patch; the index rows are inserted once, guarded by the
+  // absence of a `repo_index_state` row (all in one transaction).
+  //
+  // Old-side (base) lines of `src/middleware/ratelimit.ts`:
+  //    5-7  bucketKey   (touched: PR edits old line 6)
+  //    9-16 rateLimit   (touched: PR edits old line 13)
+  //   18-20 resetBuckets (NOT touched: demonstrates the hunk filter; it has a
+  //                       caller, so it would show up if every symbol did)
+  // `src/api/public/webhooks.ts` is a changed file but is deliberately given no
+  // symbol rows (shows up as "uncovered"); its endpoint is attributed through
+  // the caller file `src/api/public/index.ts` instead.
+  const RATELIMIT_FILE = 'src/middleware/ratelimit.ts';
+  const RATELIMIT_PATCH =
+    '@@ -3,14 +3,17 @@\n' +
+    ' const buckets = new Map<string, number>();\n' +
+    ' \n' +
+    ' export function bucketKey(req: FastifyRequest): string {\n' +
+    '-  return req.ip;\n' +
+    "+  const apiKey = req.headers['x-api-key'];\n" +
+    '+  return typeof apiKey === \'string\' ? `key:${apiKey}` : `ip:${req.ip}`;\n' +
+    ' }\n' +
+    ' \n' +
+    ' export function rateLimit(max: number) {\n' +
+    '   return async (req: FastifyRequest) => {\n' +
+    '     const key = bucketKey(req);\n' +
+    '     const used = buckets.get(key) ?? 0;\n' +
+    "-    if (used >= max) throw new Error('rate limit exceeded');\n" +
+    '+    if (used >= max) {\n' +
+    "+      throw new Error('rate limit exceeded');\n" +
+    '+    }\n' +
+    '     buckets.set(key, used + 1);\n' +
+    '   };\n' +
+    ' }\n';
+  await db
+    .update(t.prFiles)
+    .set({ patch: RATELIMIT_PATCH, additions: 5, deletions: 2 })
+    .where(
+      and(
+        eq(t.prFiles.prId, pr!.id),
+        eq(t.prFiles.path, RATELIMIT_FILE),
+        isNull(t.prFiles.patch),
+      ),
+    );
+
+  const [indexRow] = await db
+    .select({ repoId: t.repoIndexState.repoId })
+    .from(t.repoIndexState)
+    .where(eq(t.repoIndexState.repoId, repoId));
+  if (!indexRow) {
+    await db.transaction(async (tx) => {
+      await tx.insert(t.repoIndexState).values({
+        repoId,
+        lastIndexedSha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
+        indexerVersion: INDEXER_VERSION,
+        status: 'full',
+        filesIndexed: 5,
+        filesSkipped: 0,
+        stats: { durationMs: 1200, seeded: true },
+      });
+
+      const sym = (path: string, name: string, line: number, endLine: number, signature: string) => ({
+        repoId,
+        path,
+        name,
+        kind: 'function',
+        line,
+        endLine,
+        exported: true,
+        signature,
+        contentHash: 'seed',
+      });
+      await tx.insert(t.symbols).values([
+        sym(RATELIMIT_FILE, 'bucketKey', 5, 7, 'export function bucketKey(req: FastifyRequest): string'),
+        sym(RATELIMIT_FILE, 'rateLimit', 9, 16, 'export function rateLimit(max: number)'),
+        sym(RATELIMIT_FILE, 'resetBuckets', 18, 20, 'export function resetBuckets(): void'),
+        sym('src/api/public/index.ts', 'publicRouter', 10, 40, 'export async function publicRouter(app: FastifyInstance)'),
+        sym('src/api/router.ts', 'registerRoutes', 30, 55, 'export async function registerRoutes(app: FastifyInstance)'),
+        sym('src/jobs/reset-buckets.ts', 'resetRateBuckets', 5, 14, 'export async function resetRateBuckets()'),
+      ]);
+
+      const ref = (fromPath: string, toSymbol: string, line: number) => ({
+        repoId,
+        fromPath,
+        toSymbol,
+        line,
+        declFile: RATELIMIT_FILE,
+        contentHash: 'seed',
+      });
+      await tx.insert(t.references).values([
+        ref('src/api/public/index.ts', 'rateLimit', 23),
+        ref('src/api/router.ts', 'rateLimit', 41),
+        ref('src/jobs/reset-buckets.ts', 'bucketKey', 9),
+        ref('src/jobs/reset-buckets.ts', 'resetBuckets', 11),
+      ]);
+
+      // Percentiles stay < 95 so run-executor's buildRankNote stays silent.
+      const rank = (filePath: string, rank: number, percentile: number) => ({
+        repoId,
+        filePath,
+        pagerank: rank,
+        hotness: 0,
+        rank,
+        percentile,
+      });
+      await tx.insert(t.fileRank).values([
+        rank(RATELIMIT_FILE, 0.2, 90),
+        rank('src/api/public/index.ts', 0.12, 75),
+        rank('src/api/router.ts', 0.08, 60),
+        rank('src/jobs/reset-buckets.ts', 0.03, 30),
+      ]);
+
+      await tx.insert(t.fileFacts).values([
+        {
+          repoId,
+          filePath: 'src/api/public/index.ts',
+          endpoints: ['GET /api/public/items', 'POST /api/public/webhooks', 'GET /api/public/health'],
+          crons: [],
+        },
+        { repoId, filePath: 'src/api/router.ts', endpoints: [], crons: [] },
+        { repoId, filePath: 'src/jobs/reset-buckets.ts', endpoints: [], crons: ['0 * * * *'] },
+      ]);
+    });
   }
 
   // ---- built-in agents (the three starter presets) ----

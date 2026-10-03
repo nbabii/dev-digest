@@ -47,6 +47,11 @@ export interface IndexState extends IndexResult {
   /** True when the layer is running on the ripgrep fallback. */
   degraded?: boolean;
   degradedReason?: DegradedReason;
+  /**
+   * True while an index/refresh/resync job for this repo is queued or running.
+   * Filled by `getIndexState`; absent on the synthesised no-row state.
+   */
+  indexing?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +70,8 @@ export interface BlastCallerRow {
   symbol: string;
   /** Which changed symbol this caller reaches. */
   viaSymbol: string;
+  /** File that declares `viaSymbol` (persistent path only; absent on ripgrep fallback). */
+  declFile?: string;
   /** 1-based line of the reference (representative; for the BlastRadius view). */
   line: number;
   /** file_rank.rank of the caller file (0 in the degraded/ripgrep path). */
@@ -82,6 +89,8 @@ export interface BlastResult {
    * Present on the persistent (non-degraded) path; absent otherwise.
    */
   factsByFile?: Record<string, { endpoints: string[]; crons: string[] }>;
+  /** True when the SQL caller-row cap (BLAST_MAX_CALLER_ROWS) was hit. */
+  callersTruncated?: boolean;
   degraded?: boolean;
   reason?: DegradedReason;
 }
@@ -97,6 +106,11 @@ export interface SymbolRow {
   exported: boolean;
   startLine: number;
   endLine: number;
+  /**
+   * False when the index row had no `line`/`end_line` (older index): the
+   * start/end above are then fallbacks, not a real declared range.
+   */
+  rangeKnown?: boolean;
   signature: string | null;
 }
 

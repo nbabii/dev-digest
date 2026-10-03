@@ -40,7 +40,7 @@ describe('tool descriptions', () => {
     }
   });
 
-  it('never says "do not call" on the get_blast_radius stub', () => {
+  it('never says "do not call" on get_blast_radius', () => {
     expect(DESCRIPTIONS.get_blast_radius).not.toMatch(/do not call/i);
   });
 

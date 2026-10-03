@@ -20,7 +20,7 @@ function isFlat(prop: Record<string, unknown>): boolean {
 describe('startup token budget', () => {
   it('stays within budget with zero port calls', async () => {
     const calls = vi.fn();
-    const methods = ['listRepos', 'listPulls', 'listAgents', 'startReview', 'activeRuns', 'listRuns', 'reviewsForPull', 'conventions'];
+    const methods = ['listRepos', 'listPulls', 'listAgents', 'startReview', 'activeRuns', 'listRuns', 'reviewsForPull', 'conventions', 'blastRadius'];
     const api = Object.fromEntries(
       methods.map((m) => [m, (): never => { calls(m); throw new Error(`port touched: ${m}`); }]),
     ) as unknown as DevDigestApi;

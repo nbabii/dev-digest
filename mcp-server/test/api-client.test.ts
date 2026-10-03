@@ -127,6 +127,30 @@ describe('ApiClient happy paths (real HTTP)', () => {
     expect(seen.at(-1)?.url).toBe('/pulls/p1/reviews');
   });
 
+  it('blastRadius: GET /pulls/:id/blast-radius, lenient guard, shape error on drift', async () => {
+    const wire = {
+      repo: 'acme/api', pr_id: 'p1', pr_number: 482, future_field: 1,
+      index: { status: 'ready', indexing: false, available: true, reason: null, facts_complete: true, last_indexed_sha: null, indexed_at: null },
+      changed_files: { total: 1, covered: 1, uncovered: [], no_symbol_touched: [], without_patch: 0, source: 'pr_files', truncated: false },
+      totals: { symbols: 1, callers: 1, endpoints: 0, crons: 0 },
+      symbols: [{
+        name: 'f', kind: 'function', file: 'a.ts', line: null, exported: true, match: 'hunk',
+        callers: [{ name: 'g', file: 'b.ts', line: 3, url: 'u' }],
+        callers_total: 1, endpoints_total: 0, crons_total: 0, endpoints_affected: [], crons_affected: [], symbol: 'f',
+      }],
+      limits: { symbols_truncated: false, callers_truncated: false },
+    };
+    handler = (_q, res) => json(res, 200, wire);
+    const out = await new ApiClient(baseUrl).blastRadius('p/1');
+    expect(seen.at(-1)?.url).toBe('/pulls/p%2F1/blast-radius');
+    expect(out.index.last_indexed_sha).toBeNull();
+    expect(out.symbols[0]!.callers[0]).toEqual({ name: 'g', file: 'b.ts', line: 3, url: 'u' });
+    expect(out).not.toHaveProperty('pr_id');
+
+    handler = (_q, res) => json(res, 200, { ...wire, totals: undefined });
+    expect((await rejection(new ApiClient(baseUrl).blastRadius('p1'))).kind).toBe('shape');
+  });
+
   it('conventions with and without a scan', async () => {
     const candidate = {
       id: 'c1',

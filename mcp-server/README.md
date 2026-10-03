@@ -12,7 +12,7 @@ no keys of its own.
 | `run_agent_on_pr` | Runs one agent on a PR and returns the finished verdict + findings (waits up to ~90 s, else returns a `run_id`) | **yes** (spends LLM credits) |
 | `get_findings` | Verdict and findings of an already finished run (filters, pagination) | no |
 | `get_conventions` | Stored repo conventions (never starts a scan) | no |
-| `get_blast_radius` | Stub — returns `not_implemented` | no |
+| `get_blast_radius` | PR impact map: touched symbols, callers (`file:line`), endpoints and crons that may depend on them; read-only, from the repo index | no |
 
 Arguments are flat: `repo` is `"owner/name"`, `pr` is the PR number, `agent` is
 an agent id or name. Responses are concise by default (`response_format`:

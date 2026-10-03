@@ -4,6 +4,7 @@ import {
   ApiError,
   type ActiveRun,
   type Agent,
+  type BlastRadiusReport,
   type ConventionsResult,
   type DevDigestApi,
   type PrMeta,
@@ -117,6 +118,59 @@ const conventionsG = z.object({
   ),
 });
 
+const int = z.number();
+const strings = z.array(z.string()).nullish().transform((v) => v ?? []);
+
+const blastG = z.object({
+  repo: z.string(),
+  pr_number: int,
+  index: z.object({
+    status: z.string(),
+    indexing: z.boolean(),
+    available: z.boolean(),
+    reason: nullable(z.string()),
+    facts_complete: z.boolean(),
+    last_indexed_sha: nullable(z.string()),
+  }),
+  changed_files: z.object({
+    total: int,
+    covered: int,
+    uncovered: strings,
+    no_symbol_touched: strings,
+    without_patch: int.nullish().transform((v) => v ?? 0),
+    source: z.string(),
+    truncated: z.boolean().nullish().transform((v) => v ?? false),
+  }),
+  totals: z.object({ symbols: int, callers: int, endpoints: int, crons: int }),
+  symbols: z.array(
+    z.object({
+      name: z.string(),
+      kind: z.string().nullish().transform((v) => v ?? ''),
+      file: z.string(),
+      line: nullable(int),
+      exported: z.boolean().nullish().transform((v) => v ?? false),
+      match: z.string().nullish().transform((v) => v ?? 'hunk'),
+      callers: z.array(
+        z.object({
+          name: z.string(),
+          file: z.string(),
+          line: int,
+          url: z.string().nullish().transform((v) => v ?? ''),
+        }),
+      ),
+      callers_total: int,
+      endpoints_total: int,
+      crons_total: int,
+      endpoints_affected: strings,
+      crons_affected: strings,
+    }),
+  ),
+  limits: z.object({
+    symbols_truncated: z.boolean().nullish().transform((v) => v ?? false),
+    callers_truncated: z.boolean().nullish().transform((v) => v ?? false),
+  }),
+});
+
 const errorEnvelopeG = z.object({
   error: z.object({ code: z.string().optional(), message: z.string().optional() }),
 });
@@ -177,6 +231,10 @@ export class ApiClient implements DevDigestApi {
 
   conventions(repoId: string): Promise<ConventionsResult> {
     return this.request('GET', `/repos/${enc(repoId)}/conventions`, conventionsG);
+  }
+
+  blastRadius(prId: string): Promise<BlastRadiusReport> {
+    return this.request('GET', `/pulls/${enc(prId)}/blast-radius`, blastG) as Promise<BlastRadiusReport>;
   }
 
   private async request<T>(method: 'GET' | 'POST', path: string, guard: Guard<T>, body?: unknown): Promise<T> {
